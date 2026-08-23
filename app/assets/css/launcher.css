@@ -5059,6 +5059,167 @@ form[name='submitSecretQuestion'] p {
     color: rgba(165, 165, 165, 0.75);
 }
 
+/* Window selection overlay (borderless feature). */
+#windowSelectContent {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 75%;
+}
+#windowSelectHeader {
+    font-family: 'Avenir Medium';
+    font-size: 20px;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 25px;
+}
+#windowFilterControls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 420px;
+}
+#windowFilterControls > #windowFilterInput {
+    flex: 1 1 auto;
+    margin-bottom: 8px;
+    background-color: rgba(255, 255, 255, 0.75);
+    padding: 6px;
+    border-radius: 3px;
+    border: 2px solid rgba(255, 255, 255, 0.75);
+}
+#windowSelectList {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    max-height: 65%;
+    min-height: 40%;
+    width: 420px;
+}
+#windowSelectListScrollable {
+    width: 100%;
+    padding: 0px 5px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+#windowSelectListScrollable::-webkit-scrollbar {
+    width: 2px;
+}
+#windowSelectListScrollable::-webkit-scrollbar-track {
+    display: none;
+}
+#windowSelectListScrollable::-webkit-scrollbar-thumb {
+    border-radius: 10px;
+    box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.50);
+}
+
+/* Window listing row. */
+.windowListing {
+    color: white;
+    border: 1px solid rgba(126, 126, 126, 0.57);
+    border-radius: 3px;
+    padding: 8px 12px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    opacity: 0.6;
+    transition: 0.25s ease;
+    cursor: pointer;
+    position: relative;
+    background: rgba(0, 0, 0, 0.25);
+    text-align: left;
+}
+.windowListing[selected] {
+    cursor: default;
+    opacity: 1.0;
+    border-color: #fff;
+}
+.windowListing:hover,
+.windowListing:focus {
+    outline: none;
+    opacity: 1.0;
+}
+.windowListingDetails {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+.windowListingName {
+    display: block;
+    width: 100%;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.windowListingProcess {
+    display: block;
+    font-size: 10px;
+    color: rgba(202, 202, 202, 0.75);
+    margin-top: 2px;
+}
+
+/* Window selection actions. */
+#windowSelectActions {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin-top: 25px;
+}
+#windowSelectActionButtons {
+    display: flex;
+    gap: 12px;
+}
+#windowMaximizeButton,
+#windowMinimizeButton {
+    background: none;
+    border: 1px solid #ffffff;
+    color: white;
+    font-family: 'Avenir Medium';
+    font-weight: bold;
+    border-radius: 2px;
+    padding: 4px 16px;
+    cursor: pointer;
+    transition: 0.25s ease;
+    min-height: 20.67px;
+}
+#windowMaximizeButton:hover,
+#windowMaximizeButton:focus,
+#windowMinimizeButton:hover,
+#windowMinimizeButton:focus {
+    box-shadow: 0px 0px 10px 0px #fff;
+    outline: none;
+}
+#windowMaximizeButton:active,
+#windowMinimizeButton:active {
+    border-color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.75);
+}
+#windowSelectCancel {
+    font-weight: bold;
+    font-size: 10px;
+    text-decoration: none;
+    padding-top: 10px;
+    color: rgba(202, 202, 202, 0.75);
+    transition: 0.25s ease;
+    background: none;
+    border: none;
+    outline: none;
+    cursor: pointer;
+}
+#windowSelectCancel:hover,
+#windowSelectCancel:focus {
+    color: rgba(255, 255, 255, 0.75);
+}
+#windowSelectCancel:active {
+    color: rgba(165, 165, 165, 0.75);
+}
+
 /*******************************************************************************
  *                                                                             *
  * Loading Element (app.ejs)                                                   *
