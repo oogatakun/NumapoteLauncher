@@ -384,17 +384,17 @@ ipcMain.handle('apply-window-mode', async (event, handleStr, mode) => {
     }
     const hwnd = parseInt(handleStr)
     if (isNaN(hwnd)) return { success: false, message: 'Invalid window handle' }
-    let ffi
-    try { ffi = require('ffi-napi') } catch(e){ return { success:false, message: 'ffi-napi がインストールされていません。' } }
+    let koffi
+    try { koffi = require('koffi') } catch(e){ return { success:false, message: 'koffi がインストールされていません。' } }
     try {
-        const user32 = new ffi.Library('user32', {
-            'GetWindowLongPtrW': ['longlong', ['longlong', 'int']],
-            'SetWindowLongPtrW': ['longlong', ['longlong', 'int', 'longlong']],
-            'SetWindowPos': ['bool', ['longlong', 'longlong', 'int', 'int', 'int', 'int', 'uint']],
-            'GetWindowRect': ['bool', ['longlong', 'pointer']],
-            'MonitorFromWindow': ['longlong', ['longlong', 'uint']],
-            'GetMonitorInfoW': ['bool', ['longlong', 'pointer']]
-        })
+        const user32 = koffi.load('user32.dll')
+        const GetWindowLongPtrW = user32.func('int64_t GetWindowLongPtrW(int64_t hWnd, int32_t nIndex)')
+        const SetWindowLongPtrW = user32.func('int64_t SetWindowLongPtrW(int64_t hWnd, int32_t nIndex, int64_t dwNewLong)')
+        const SetWindowPos = user32.func('bool SetWindowPos(int64_t hWnd, int64_t hWndInsertAfter, int32_t X, int32_t Y, int32_t cx, int32_t cy, uint32_t uFlags)')
+        const GetWindowRect = user32.func('bool GetWindowRect(int64_t hWnd, _Out_ void *lpRect)')
+        const MonitorFromWindow = user32.func('int64_t MonitorFromWindow(int64_t hwnd, uint32_t dwFlags)')
+        const GetMonitorInfoW = user32.func('bool GetMonitorInfoW(int64_t hMonitor, _Inout_ void *lpmi)')
+
         const GWL_STYLE = -16
         const WS_OVERLAPPEDWINDOW = 0x00CF0000
         const WS_POPUP = 0x80000000
@@ -404,9 +404,13 @@ ipcMain.handle('apply-window-mode', async (event, handleStr, mode) => {
         const SWP_FRAMECHANGED = 0x0020
         const MONITOR_DEFAULTTONEAREST = 0x00000002
 
+        // JS bitwise operates on 32-bit; >>> 0 keeps the style as unsigned 32-bit
+        // so WS_POPUP (0x80000000) isn't sign-extended when passed to int64_t.
+        const readStyle = (h) => Number(GetWindowLongPtrW(h, GWL_STYLE)) >>> 0
+
         const getRect = (h) => {
             const buf = Buffer.alloc(16)
-            if (!user32.GetWindowRect(h, buf)) return null
+            if (!GetWindowRect(h, buf)) return null
             const left = buf.readInt32LE(0)
             const top = buf.readInt32LE(4)
             const right = buf.readInt32LE(8)
@@ -416,36 +420,36 @@ ipcMain.handle('apply-window-mode', async (event, handleStr, mode) => {
 
         if (mode === 'maximize') {
             if (!originalWindowRects.has(hwnd)) {
-                const style = parseInt(user32.GetWindowLongPtrW(hwnd, GWL_STYLE))
+                const style = readStyle(hwnd)
                 const rect = getRect(hwnd)
                 if (rect == null) return { success: false, message: 'ウィンドウ情報の取得に失敗しました。' }
                 originalWindowRects.set(hwnd, { style, ...rect })
             }
-            const cur = parseInt(user32.GetWindowLongPtrW(hwnd, GWL_STYLE))
-            const newStyle = (cur & ~WS_OVERLAPPEDWINDOW) | WS_POPUP
-            user32.SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle)
+            const cur = readStyle(hwnd)
+            const newStyle = ((cur & ~WS_OVERLAPPEDWINDOW) | WS_POPUP) >>> 0
+            SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle)
 
-            const hmon = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+            const hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
             const mi = Buffer.alloc(40)
             mi.writeUInt32LE(40, 0) // cbSize
-            if (!user32.GetMonitorInfoW(hmon, mi)) return { success: false, message: 'モニター情報の取得に失敗しました。' }
+            if (!GetMonitorInfoW(hmon, mi)) return { success: false, message: 'モニター情報の取得に失敗しました。' }
             const mLeft = mi.readInt32LE(4)
             const mTop = mi.readInt32LE(8)
             const mRight = mi.readInt32LE(12)
             const mBottom = mi.readInt32LE(16)
-            user32.SetWindowPos(hwnd, 0, mLeft, mTop, mRight - mLeft, mBottom - mTop, SWP_NOZORDER | SWP_FRAMECHANGED)
+            SetWindowPos(hwnd, 0, mLeft, mTop, mRight - mLeft, mBottom - mTop, SWP_NOZORDER | SWP_FRAMECHANGED)
             return { success: true }
         } else if (mode === 'restore') {
             const saved = originalWindowRects.get(hwnd)
             if (saved) {
-                user32.SetWindowLongPtrW(hwnd, GWL_STYLE, saved.style)
-                user32.SetWindowPos(hwnd, 0, saved.x, saved.y, saved.w, saved.h, SWP_NOZORDER | SWP_FRAMECHANGED)
+                SetWindowLongPtrW(hwnd, GWL_STYLE, saved.style >>> 0)
+                SetWindowPos(hwnd, 0, saved.x, saved.y, saved.w, saved.h, SWP_NOZORDER | SWP_FRAMECHANGED)
                 originalWindowRects.delete(hwnd)
             } else {
-                const cur = parseInt(user32.GetWindowLongPtrW(hwnd, GWL_STYLE))
-                const newStyle = (cur & ~WS_POPUP) | WS_OVERLAPPEDWINDOW
-                user32.SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle)
-                user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+                const cur = readStyle(hwnd)
+                const newStyle = ((cur & ~WS_POPUP) | WS_OVERLAPPEDWINDOW) >>> 0
+                SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle)
+                SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
             }
             return { success: true }
         } else {
