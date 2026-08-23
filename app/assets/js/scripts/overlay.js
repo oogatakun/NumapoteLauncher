@@ -522,7 +522,7 @@ function getSelectedWindowHwnd(){
     return null
 }
 
-async function applyWindowMode(mode, successMsg){
+async function applyWindowMode(mode){
     const hwnd = getSelectedWindowHwnd()
     if(hwnd == null){
         setOverlayContent('未選択', 'ウィンドウを選択してください。', 'OK')
@@ -530,27 +530,32 @@ async function applyWindowMode(mode, successMsg){
         toggleOverlay(true)
         return
     }
+    let error = null
     try {
         const res = await _ipc.invoke('apply-window-mode', hwnd, mode)
-        if(res && res.success){
-            setOverlayContent('完了', successMsg, 'OK')
-        } else {
-            setOverlayContent('失敗', res && res.message ? res.message : '操作に失敗しました。', 'OK')
+        if(!(res && res.success)){
+            error = res && res.message ? res.message : '操作に失敗しました。'
         }
     } catch (err) {
-        setOverlayContent('エラー', err.message || '不明なエラーが発生しました。', 'OK')
+        error = err.message || '不明なエラーが発生しました。'
     }
     document.getElementById('windowFilterInput').value = ''
-    setOverlayHandler(null)
-    toggleOverlay(true)
+    if(error){
+        setOverlayContent('失敗', error, 'OK')
+        setOverlayHandler(null)
+        toggleOverlay(true)
+    } else {
+        // Success: close the overlay silently (no confirmation message).
+        toggleOverlay(false)
+    }
 }
 
 document.getElementById('windowMaximizeButton').addEventListener('click', () => {
-    applyWindowMode('maximize', '選択したウィンドウをボーダーレス化しました。')
+    applyWindowMode('maximize')
 })
 
 document.getElementById('windowMinimizeButton').addEventListener('click', () => {
-    applyWindowMode('restore', '選択したウィンドウを元のサイズに戻しました。')
+    applyWindowMode('restore')
 })
 
 document.getElementById('windowSelectCancel').addEventListener('click', () => {
