@@ -539,15 +539,12 @@ async function applyWindowMode(mode){
     } catch (err) {
         error = err.message || '不明なエラーが発生しました。'
     }
-    document.getElementById('windowFilterInput').value = ''
     if(error){
         setOverlayContent('失敗', error, 'OK')
         setOverlayHandler(null)
         toggleOverlay(true)
-    } else {
-        // Success: close the overlay silently (no confirmation message).
-        toggleOverlay(false)
     }
+    // Success: keep the window-selection overlay open (no message, no close).
 }
 
 document.getElementById('windowMaximizeButton').addEventListener('click', () => {
