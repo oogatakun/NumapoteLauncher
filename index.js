@@ -354,20 +354,39 @@ ipcMain.handle('list-windows', async (event) => {
     try {
         const wnm = require('node-window-manager')
         const wins = wnm.windowManager.getWindows()
-        const windows = wins.map(w => {
+        // System/utility windows that are never useful to borderless.
+        const IGNORE_TITLES = new Set([
+            'Default IME', 'MSCTFIME UI', 'Windows 入力エクスペリエンス',
+            'Program Manager', 'Windows Input Experience', 'Microsoft Text Input Application', ''
+        ])
+        // Windows shell host executables to hide from the list.
+        const IGNORE_EXES = new Set([
+            'shellexperiencehost.exe', 'searchhost.exe', 'searchapp.exe',
+            'startmenuexperiencehost.exe', 'textinputhost.exe', 'lockapp.exe',
+            'systemsettings.exe'
+        ])
+        const seen = new Set()
+        const windows = []
+        for(const w of wins){
             let title = ''
-            try { title = typeof w.getTitle === 'function' ? w.getTitle() : (w.title || '') } catch(e) { title = w.title || '' }
-            let handle = w.handle || w.hwnd || null
-            if(!handle && w.getNativeWindowHandle && typeof w.getNativeWindowHandle === 'function'){
-                try {
-                    const buf = w.getNativeWindowHandle()
-                    if(Buffer.isBuffer(buf)){
-                        handle = buf.readUInt32LE(0)
-                    }
-                } catch(e){}
-            }
-            return { handle: String(handle), title: title, processId: w.processId || w.processid || null }
-        })
+            try { title = typeof w.getTitle === 'function' ? (w.getTitle() || '') : (w.title || '') } catch(e) { title = w.title || '' }
+            title = title.trim()
+            if(!title || IGNORE_TITLES.has(title)) continue
+            // Skip hidden / non-real windows when the API is available.
+            try { if(typeof w.isVisible === 'function' && !w.isVisible()) continue } catch(e) { /* ignore */ }
+            try { if(typeof w.isWindow === 'function' && !w.isWindow()) continue } catch(e) { /* ignore */ }
+            // Skip Windows shell host processes (Start, Search, notifications, IME host).
+            let exe = ''
+            try { exe = (w.path || '').split(/[\\/]/).pop().toLowerCase() } catch(e) { exe = '' }
+            if(exe && IGNORE_EXES.has(exe)) continue
+            // node-window-manager exposes the HWND as `id`.
+            const handle = (w.id != null ? w.id : (w.handle != null ? w.handle : (w.hwnd != null ? w.hwnd : null)))
+            if(handle == null) continue
+            const handleStr = String(handle)
+            if(seen.has(handleStr)) continue
+            seen.add(handleStr)
+            windows.push({ handle: handleStr, title, processId: w.processId || w.processid || null })
+        }
         return { success: true, windows }
     } catch (err) {
         console.warn('[main] list-windows failed', err)
