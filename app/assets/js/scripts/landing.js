@@ -815,6 +815,7 @@ function slide_(up){
     const newsBtn = document.querySelector('#landingContainer > #lower > #center #content')
     const landingContainer = document.getElementById('landingContainer')
     const newsContainer = document.querySelector('#landingContainer > #newsContainer')
+    const borderlessBtn = document.getElementById('borderlessMediaButton')
 
     newsGlideCount++
 
@@ -825,6 +826,10 @@ function slide_(up){
         lCLRight.style.top = '-200vh'
         newsBtn.style.top = '130vh'
         newsContainer.style.top = '0px'
+        if(borderlessBtn){
+            borderlessBtn.style.opacity = '0'
+            borderlessBtn.style.pointerEvents = 'none'
+        }
         //date.toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric'})
         //landingContainer.style.background = 'rgba(29, 29, 29, 0.55)'
         landingContainer.style.background = 'rgba(0, 0, 0, 0.50)'
@@ -848,6 +853,10 @@ function slide_(up){
         lCLCenter.style.top = '0px'
         lCLRight.style.top = '0px'
         newsBtn.style.top = '10px'
+        if(borderlessBtn){
+            borderlessBtn.style.opacity = ''
+            borderlessBtn.style.pointerEvents = ''
+        }
     }
 }
 
