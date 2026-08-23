@@ -1,0 +1,820 @@
+const remoteMain = require('@electron/remote/main')
+remoteMain.initialize()
+
+// Requirements
+const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron')
+const autoUpdater                       = require('electron-updater').autoUpdater
+const ejse                              = require('ejs-electron')
+const isDev                             = require('./app/assets/js/isdev')
+const path                              = require('path')
+const semver                            = require('semver')
+const { pathToFileURL }                 = require('url')
+const { AZURE_CLIENT_ID, MC_LAUNCHER_CLIENT_ID, MSFT_OPCODE, MSFT_REPLY_TYPE, MSFT_ERROR, SHELL_OPCODE } = require('./app/assets/js/ipcconstants')
+const LangLoader                        = require('./app/assets/js/langloader')
+const { default: got }                  = require('got')
+const fs                                = require('fs')
+const fsExtra                           = require('fs-extra')
+const crypto                            = require('crypto')
+
+process.on('uncaughtException', (err) => {
+    console.error('[main] uncaughtException', err)
+})
+
+process.on('unhandledRejection', (reason) => {
+    console.error('[main] unhandledRejection', reason)
+})
+
+app.setAsDefaultProtocolClient('numapotelauncher')
+
+if (isDev) {
+    const devDataRoot = path.join(app.getPath('appData'), 'NumapoteLauncher-dev')
+    app.setPath('userData', devDataRoot)
+    app.setPath('sessionData', path.join(devDataRoot, 'Session Data'))
+}
+
+let deepLinkUrl = null
+let win
+const gotLock = isDev ? true : app.requestSingleInstanceLock()
+
+if (!gotLock) {
+    console.warn('[main] another packaged instance is already running, exiting')
+    app.quit()
+} else {
+    app.on('second-instance', (event, argv, workingDirectory) => {
+        const deeplinkArg = argv.find(arg => arg.startsWith('numapotelauncher://'))
+
+        if (deeplinkArg) {
+            if (win) {
+                if (win.isMinimized()) win.restore()
+                win.focus()
+
+                handleDeepLink(deeplinkArg)
+            } else {
+                deepLinkUrl = deeplinkArg
+            }
+        }
+    })
+}
+
+// URI起動mac用
+app.on('open-url', (event, url) => {
+    event.preventDefault()
+    deepLinkUrl = url
+})
+
+app.on('render-process-gone', (event, webContents, details) => {
+    console.error('[main] render-process-gone', details)
+})
+
+app.on('child-process-gone', (event, details) => {
+    console.error('[main] child-process-gone', details)
+})
+
+// URI起動win用
+app.on('ready', () => {
+    const args = process.argv
+    deepLinkUrl = args.find(arg => arg.startsWith('numapotelauncher://'))
+})
+
+function handleDeepLink(url) {
+    const parsedUrl = new URL(url)
+    const query = parsedUrl.searchParams.get('query')
+
+    if (win && win.webContents) {
+        win.webContents.send('setServerOption', query)
+    }
+}
+
+
+// Setup Lang
+LangLoader.setupLanguage()
+
+// Setup auto updater.
+function initAutoUpdater(event, data) {
+
+    if(data){
+        autoUpdater.allowPrerelease = true
+    } else {
+        // Defaults to true if application version contains prerelease components (e.g. 0.12.1-alpha.1)
+        // autoUpdater.allowPrerelease = true
+    }
+
+    if(isDev){
+        autoUpdater.autoInstallOnAppQuit = false
+        autoUpdater.updateConfigPath = path.join(__dirname, 'dev-app-update.yml')
+    }
+    if(process.platform === 'darwin'){
+        autoUpdater.autoDownload = false
+    }
+    autoUpdater.on('update-available', (info) => {
+        event.sender.send('autoUpdateNotification', 'update-available', info)
+    })
+    autoUpdater.on('update-downloaded', (info) => {
+        event.sender.send('autoUpdateNotification', 'update-downloaded', info)
+    })
+    autoUpdater.on('update-not-available', (info) => {
+        event.sender.send('autoUpdateNotification', 'update-not-available', info)
+    })
+    autoUpdater.on('checking-for-update', () => {
+        event.sender.send('autoUpdateNotification', 'checking-for-update')
+    })
+    autoUpdater.on('error', (err) => {
+        event.sender.send('autoUpdateNotification', 'realerror', err)
+    })
+}
+
+// Open channel to listen for update actions.
+ipcMain.on('autoUpdateAction', (event, arg, data) => {
+    switch(arg){
+        case 'initAutoUpdater':
+            console.log('Initializing auto updater.')
+            initAutoUpdater(event, data)
+            event.sender.send('autoUpdateNotification', 'ready')
+            break
+        case 'checkForUpdate':
+            autoUpdater.checkForUpdates()
+                .catch(err => {
+                    event.sender.send('autoUpdateNotification', 'realerror', err)
+                })
+            break
+        case 'allowPrereleaseChange':
+            if(!data){
+                const preRelComp = semver.prerelease(app.getVersion())
+                if(preRelComp != null && preRelComp.length > 0){
+                    autoUpdater.allowPrerelease = true
+                } else {
+                    autoUpdater.allowPrerelease = data
+                }
+            } else {
+                autoUpdater.allowPrerelease = data
+            }
+            break
+        case 'installUpdateNow':
+            autoUpdater.quitAndInstall()
+            break
+        default:
+            console.log('Unknown argument', arg)
+            break
+    }
+})
+// Redirect distribution index event from preloader to renderer.
+ipcMain.on('distributionIndexDone', (event, res) => {
+    event.sender.send('distributionIndexDone', res)
+})
+
+// 手動ダウンロード画面
+! function() {
+    // ウィンドウID管理
+    let manualWindowIndex = 0
+    let manualWindows = []
+    // ダウンロードID管理
+    let downloadIndex = 0
+    // ダウンロードフォルダ
+    const downloadDirectory = path.join(app.getPath('temp'), 'NumapoteLauncher', 'ManualDownloads')
+    // IDでウィンドウを閉じる
+    ipcMain.on('closeManualWindow', (ipcEvent, index) => {
+        // IDを探してウィンドウを閉じる
+        const window = manualWindows[index]
+        if (window !== undefined) {
+            window.win.close()
+            manualWindows[index] = undefined
+        }
+    })
+    // IDでウィンドウを閉じる
+    ipcMain.on('preventManualWindowRedirect', (ipcEvent, index, prevent) => {
+        // IDを探してリダイレクト可否フラグ変更
+        const window = manualWindows[index]
+        if (window !== undefined) {
+            window.preventRedirect = prevent
+        }
+    })
+    // 手動ダウンロード用のウィンドウを開く
+    ipcMain.on('openManualWindow', (ipcEvent, result) => {
+        // ハッシュチェック
+        function validateLocal(filePath, algo, hash) {
+            if (fs.existsSync(filePath)) {
+                //No hash provided, have to assume it's good.
+                if (hash == null) {
+                    return true
+                }
+                let buf = fs.readFileSync(filePath)
+                let calcdhash = crypto.createHash(algo).update(buf).digest('hex')
+                return calcdhash === hash.toLowerCase()
+            }
+            return false
+        }
+
+        for (let manual of result.manualData) {
+            const index = ++manualWindowIndex
+            const win = new BrowserWindow({
+                width: 1280,
+                height: 720,
+                icon: getPlatformIcon('Numapoteicon'),
+                autoHideMenuBar: true,
+                webPreferences: {
+                    preload: path.join(__dirname, 'app', 'assets', 'js', 'manualpreloader.js'),
+                    nodeIntegration: false,
+                    contextIsolation: true, // TODO デバッグ後はtrue
+                    enableRemoteModule: false,
+                    worldSafeExecuteJavaScript: true,
+                    partition: `manual-${index}`, // パーティションを分けることでウィンドウを超えてwill-downloadイベント同士が作用しあわない
+                }
+            })
+            manualWindows[index] = {
+                win,
+                manual,
+                preventRedirect: false,
+            }
+            // セキュリティポリシー無効化
+            win.webContents.session.webRequest.onHeadersReceived((d, c) => {
+                if (d.responseHeaders['Content-Security-Policy']) {
+                    delete d.responseHeaders['Content-Security-Policy']
+                } else if (d.responseHeaders['content-security-policy']) {
+                    delete d.responseHeaders['content-security-policy']
+                }
+
+                c({ cancel: false, responseHeaders: d.responseHeaders })
+            })
+
+            // ウィンドウ開いた直後(ページ遷移時を除く)のみ最初のダイアログ表示
+            win.webContents.send('manual-first')
+            // ロードが終わったら案内情報のデータをレンダープロセスに送る
+            win.webContents.on('dom-ready', (event, args) => {
+                if (win.isDestroyed())
+                    return
+                win.webContents.send('manual-data', manual, index)
+            })
+            // リダイレクトキャンセル
+            win.webContents.on('will-navigate', (event, args) => {
+                if (win.isDestroyed())
+                    return
+                const window = manualWindows[index]
+                if (window !== undefined) {
+                    if (window.preventRedirect)
+                        event.preventDefault()
+                }
+            })
+            // ダウンロードされたらファイル名をすり替え、ハッシュチェックする
+            win.webContents.session.on('will-download', (event, item, webContents) => {
+                if (win.isDestroyed())
+                    return
+
+                downloadIndex++
+
+                // 一時フォルダに保存
+                item.setSavePath(path.join(downloadDirectory, item.getFilename()))
+
+                // 進捗を送信 (開始)
+                win.webContents.send('download-start', {
+                    index: downloadIndex,
+                    name: manual.manual.name,
+                    received: item.getReceivedBytes(),
+                    total: item.getTotalBytes(),
+                })
+                // 進捗を送信 (進行中)
+                item.on('updated', (event, state) => {
+                    if (win.isDestroyed())
+                        return
+                    win.webContents.send('download-progress', {
+                        index: downloadIndex,
+                        name: manual.manual.name,
+                        received: item.getReceivedBytes(),
+                        total: item.getTotalBytes(),
+                    })
+                })
+                // 進捗を送信 (完了)
+                item.once('done', (event, state) => {
+                    if (win.isDestroyed())
+                        return
+                    // ファイルが正しいかチェックする
+                    const v = item.getTotalBytes() === manual.size &&
+                            validateLocal(item.getSavePath(), 'md5', manual.MD5)
+                    if (!v) {
+                        // 違うファイルをダウンロードしてしまった場合
+                        win.webContents.send('download-end', {
+                            index: downloadIndex,
+                            name: manual.manual.name,
+                            state: 'hash-failed',
+                        })
+                    } else if (fsExtra.existsSync(manual.path)) {
+                        // ファイルが既にあったら閉じる
+                        win.close()
+                    } else {
+
+                        // ファイルを正しい位置に移動
+                        fsExtra.moveSync(item.getSavePath(), manual.path)
+                        // 完了を通知
+                        win.webContents.send('download-end', {
+                            index: downloadIndex,
+                            name: manual.manual.name,
+                            state,
+                        })
+                    }
+                })
+            })
+            // ダウンロードサイトを表示
+            win.loadURL(manual.manual.url)
+        }
+    })
+    app.on('quit', () => {
+        // tmpディレクトリお掃除
+        fsExtra.removeSync(downloadDirectory)
+    })
+}()
+
+
+// Handle trash item.
+ipcMain.handle(SHELL_OPCODE.TRASH_ITEM, async (event, ...args) => {
+    try {
+        await shell.trashItem(args[0])
+        return {
+            result: true
+        }
+    } catch(error) {
+        return {
+            result: false,
+            error: error
+        }
+    }
+})
+
+ipcMain.on('get-launcher-skin-path', (event) => {
+    event.returnValue = app.getPath('appData')
+})
+
+ipcMain.on('get-home-path', (event) => {
+    event.returnValue = app.getPath('home')
+})
+
+// Window listing and borderless toggle (Windows only)
+ipcMain.handle('list-windows', async (event) => {
+    if (process.platform !== 'win32') {
+        return { success: false, message: 'Not implemented on this OS' }
+    }
+    try {
+        const wnm = require('node-window-manager')
+        const wins = wnm.windowManager.getWindows()
+        // System/utility windows that are never useful to borderless.
+        const IGNORE_TITLES = new Set([
+            'Default IME', 'MSCTFIME UI', 'Windows 入力エクスペリエンス',
+            'Program Manager', 'Windows Input Experience', 'Microsoft Text Input Application', ''
+        ])
+        // Windows shell host executables to hide from the list.
+        const IGNORE_EXES = new Set([
+            'shellexperiencehost.exe', 'searchhost.exe', 'searchapp.exe',
+            'startmenuexperiencehost.exe', 'textinputhost.exe', 'lockapp.exe',
+            'systemsettings.exe'
+        ])
+        const seen = new Set()
+        const windows = []
+        for(const w of wins){
+            let title = ''
+            try { title = typeof w.getTitle === 'function' ? (w.getTitle() || '') : (w.title || '') } catch(e) { title = w.title || '' }
+            title = title.trim()
+            if(!title || IGNORE_TITLES.has(title)) continue
+            // Skip hidden / non-real windows when the API is available.
+            try { if(typeof w.isVisible === 'function' && !w.isVisible()) continue } catch(e) { /* ignore */ }
+            try { if(typeof w.isWindow === 'function' && !w.isWindow()) continue } catch(e) { /* ignore */ }
+            // Skip Windows shell host processes (Start, Search, notifications, IME host).
+            let exe = ''
+            try { exe = (w.path || '').split(/[\\/]/).pop().toLowerCase() } catch(e) { exe = '' }
+            if(exe && IGNORE_EXES.has(exe)) continue
+            // node-window-manager exposes the HWND as `id`.
+            const handle = (w.id != null ? w.id : (w.handle != null ? w.handle : (w.hwnd != null ? w.hwnd : null)))
+            if(handle == null) continue
+            const handleStr = String(handle)
+            if(seen.has(handleStr)) continue
+            seen.add(handleStr)
+            windows.push({ handle: handleStr, title, processId: w.processId || w.processid || null })
+        }
+        return { success: true, windows }
+    } catch (err) {
+        console.warn('[main] list-windows failed', err)
+        return { success: false, message: 'node-window-manager が利用できません。モジュールをインストールしてください。' }
+    }
+})
+
+// Store original window rect/style so 最小化(restore) can revert exactly.
+const originalWindowRects = new Map()
+
+ipcMain.handle('apply-window-mode', async (event, handleStr, mode) => {
+    if (process.platform !== 'win32') {
+        return { success: false, message: 'Not implemented on this OS' }
+    }
+    const hwnd = parseInt(handleStr)
+    if (isNaN(hwnd)) return { success: false, message: 'Invalid window handle' }
+    let koffi
+    try { koffi = require('koffi') } catch(e){ return { success:false, message: 'koffi がインストールされていません。' } }
+    try {
+        const user32 = koffi.load('user32.dll')
+        const GetWindowLongPtrW = user32.func('int64_t GetWindowLongPtrW(int64_t hWnd, int32_t nIndex)')
+        const SetWindowLongPtrW = user32.func('int64_t SetWindowLongPtrW(int64_t hWnd, int32_t nIndex, int64_t dwNewLong)')
+        const SetWindowPos = user32.func('bool SetWindowPos(int64_t hWnd, int64_t hWndInsertAfter, int32_t X, int32_t Y, int32_t cx, int32_t cy, uint32_t uFlags)')
+        const GetWindowRect = user32.func('bool GetWindowRect(int64_t hWnd, _Out_ void *lpRect)')
+        const MonitorFromWindow = user32.func('int64_t MonitorFromWindow(int64_t hwnd, uint32_t dwFlags)')
+        const GetMonitorInfoW = user32.func('bool GetMonitorInfoW(int64_t hMonitor, _Inout_ void *lpmi)')
+
+        const GWL_STYLE = -16
+        const WS_OVERLAPPEDWINDOW = 0x00CF0000
+        const WS_POPUP = 0x80000000
+        const SWP_NOSIZE = 0x0001
+        const SWP_NOMOVE = 0x0002
+        const SWP_NOZORDER = 0x0004
+        const SWP_FRAMECHANGED = 0x0020
+        const MONITOR_DEFAULTTONEAREST = 0x00000002
+
+        // JS bitwise operates on 32-bit; >>> 0 keeps the style as unsigned 32-bit
+        // so WS_POPUP (0x80000000) isn't sign-extended when passed to int64_t.
+        const readStyle = (h) => Number(GetWindowLongPtrW(h, GWL_STYLE)) >>> 0
+
+        const getRect = (h) => {
+            const buf = Buffer.alloc(16)
+            if (!GetWindowRect(h, buf)) return null
+            const left = buf.readInt32LE(0)
+            const top = buf.readInt32LE(4)
+            const right = buf.readInt32LE(8)
+            const bottom = buf.readInt32LE(12)
+            return { x: left, y: top, w: right - left, h: bottom - top }
+        }
+
+        if (mode === 'maximize') {
+            if (!originalWindowRects.has(hwnd)) {
+                const style = readStyle(hwnd)
+                const rect = getRect(hwnd)
+                if (rect == null) return { success: false, message: 'ウィンドウ情報の取得に失敗しました。' }
+                originalWindowRects.set(hwnd, { style, ...rect })
+            }
+            const cur = readStyle(hwnd)
+            const newStyle = ((cur & ~WS_OVERLAPPEDWINDOW) | WS_POPUP) >>> 0
+            SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle)
+
+            const hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+            const mi = Buffer.alloc(40)
+            mi.writeUInt32LE(40, 0) // cbSize
+            if (!GetMonitorInfoW(hmon, mi)) return { success: false, message: 'モニター情報の取得に失敗しました。' }
+            const mLeft = mi.readInt32LE(4)
+            const mTop = mi.readInt32LE(8)
+            const mRight = mi.readInt32LE(12)
+            const mBottom = mi.readInt32LE(16)
+            SetWindowPos(hwnd, 0, mLeft, mTop, mRight - mLeft, mBottom - mTop, SWP_NOZORDER | SWP_FRAMECHANGED)
+            return { success: true }
+        } else if (mode === 'restore') {
+            const saved = originalWindowRects.get(hwnd)
+            if (saved) {
+                SetWindowLongPtrW(hwnd, GWL_STYLE, saved.style >>> 0)
+                SetWindowPos(hwnd, 0, saved.x, saved.y, saved.w, saved.h, SWP_NOZORDER | SWP_FRAMECHANGED)
+                originalWindowRects.delete(hwnd)
+            } else {
+                const cur = readStyle(hwnd)
+                const newStyle = ((cur & ~WS_POPUP) | WS_OVERLAPPEDWINDOW) >>> 0
+                SetWindowLongPtrW(hwnd, GWL_STYLE, newStyle)
+                SetWindowPos(hwnd, 0, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED)
+            }
+            return { success: true }
+        } else {
+            return { success: false, message: 'Unknown mode' }
+        }
+    } catch (err) {
+        console.error('[main] apply-window-mode failed', err)
+        return { success: false, message: err.message }
+    }
+})
+
+
+// Hardware acceleration setting.
+// https://electronjs.org/docs/tutorial/offscreen-rendering
+const configPath = path.join(app.getPath('userData'), 'config.json')
+let hardwareAcceleration = true
+try {
+    if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+        hardwareAcceleration = config.settings?.launcher?.hardwareAcceleration ?? true
+    }
+} catch (e) {
+    // Ignore errors, use default (enabled)
+}
+if (!hardwareAcceleration) {
+    app.disableHardwareAcceleration()
+}
+
+
+const REDIRECT_URI_PREFIX = 'https://login.microsoftonline.com/common/oauth2/nativeclient?'
+const REDIRECT_URI_PREFIX_LIVE = 'https://login.live.com/oauth20_desktop.srf?'
+
+// Microsoft Auth Login
+let msftAuthWindow
+let msftAuthSuccess
+let msftAuthViewSuccess
+let msftAuthViewOnClose
+let msftAuthViewMsMcLauncherAuth
+ipcMain.on(MSFT_OPCODE.OPEN_LOGIN, (ipcEvent, ...arguments_) => {
+    if (msftAuthWindow) {
+        ipcEvent.reply(MSFT_OPCODE.REPLY_LOGIN, MSFT_REPLY_TYPE.ERROR, MSFT_ERROR.ALREADY_OPEN, msftAuthViewOnClose, msftAuthViewMsMcLauncherAuth)
+        return
+    }
+    msftAuthSuccess = false
+    msftAuthViewSuccess = arguments_[0]
+    msftAuthViewOnClose = arguments_[1]
+    msftAuthViewMsMcLauncherAuth = arguments_[2]
+    msftAuthWindow = new BrowserWindow({
+        title: LangLoader.queryJS('index.microsoftLoginTitle'),
+        backgroundColor: '#222222',
+        width: 520,
+        height: 600,
+        frame: true,
+        icon: getPlatformIcon('Numapoteicon')
+    })
+
+    msftAuthWindow.on('closed', () => {
+        msftAuthWindow = undefined
+    })
+
+    msftAuthWindow.on('close', () => {
+        if(!msftAuthSuccess) {
+            ipcEvent.reply(MSFT_OPCODE.REPLY_LOGIN, MSFT_REPLY_TYPE.ERROR, MSFT_ERROR.NOT_FINISHED, msftAuthViewOnClose, msftAuthViewMsMcLauncherAuth)
+        }
+    })
+
+    msftAuthWindow.webContents.on('did-navigate', (_, uri) => {
+        // 二重処理防止
+        if (msftAuthSuccess) {
+            return
+        }
+
+        const query = uri.startsWith(REDIRECT_URI_PREFIX) ? uri.substring(REDIRECT_URI_PREFIX.length)
+            : uri.startsWith(REDIRECT_URI_PREFIX_LIVE) ? uri.substring(REDIRECT_URI_PREFIX_LIVE.length)
+                : undefined
+
+        if (query) {
+            // 標準URLパーサを使用
+            const params = new URLSearchParams(query.split('#')[0])
+            const queryMap = {}
+            for (const [name, value] of params.entries()) {
+                queryMap[name] = value
+            }
+
+            // デバッグログ
+            if (queryMap.code) {
+                const codeLen = queryMap.code.length
+                const codeMasked = queryMap.code.substring(0, 5) + '...' + queryMap.code.substring(codeLen - 5)
+                console.log(`[MSAuth] callback: code=${codeMasked}, len=${codeLen}, hasSpace=${queryMap.code.includes(' ')}`)
+            }
+
+            msftAuthSuccess = true
+            ipcEvent.reply(MSFT_OPCODE.REPLY_LOGIN, MSFT_REPLY_TYPE.SUCCESS, queryMap, msftAuthViewSuccess, msftAuthViewMsMcLauncherAuth)
+
+            msftAuthWindow.close()
+            msftAuthWindow = null
+        }
+    })
+
+    msftAuthWindow.removeMenu()
+    if (msftAuthViewMsMcLauncherAuth) {
+        msftAuthWindow.loadURL(`https://login.live.com/oauth20_authorize.srf?prompt=select_account&client_id=${MC_LAUNCHER_CLIENT_ID}&response_type=code&scope=service::user.auth.xboxlive.com::MBI_SSL&lw=1&fl=dob,easi2&xsup=1&nopa=2&redirect_uri=https://login.live.com/oauth20_desktop.srf`)
+    } else {
+        msftAuthWindow.loadURL(`https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?prompt=select_account&client_id=${AZURE_CLIENT_ID}&response_type=code&scope=XboxLive.signin%20offline_access&redirect_uri=https://login.microsoftonline.com/common/oauth2/nativeclient`)
+    }
+})
+
+// Microsoft Auth Logout
+let msftLogoutWindow
+let msftLogoutSuccess
+let msftLogoutSuccessSent
+ipcMain.on(MSFT_OPCODE.OPEN_LOGOUT, (ipcEvent, uuid, isLastAccount) => {
+    if (msftLogoutWindow) {
+        ipcEvent.reply(MSFT_OPCODE.REPLY_LOGOUT, MSFT_REPLY_TYPE.ERROR, MSFT_ERROR.ALREADY_OPEN)
+        return
+    }
+
+    msftLogoutSuccess = false
+    msftLogoutSuccessSent = false
+    msftLogoutWindow = new BrowserWindow({
+        title: LangLoader.queryJS('index.microsoftLogoutTitle'),
+        backgroundColor: '#222222',
+        width: 520,
+        height: 600,
+        frame: true,
+        icon: getPlatformIcon('Numapoteicon')
+    })
+
+    msftLogoutWindow.on('closed', () => {
+        msftLogoutWindow = undefined
+    })
+
+    msftLogoutWindow.on('close', () => {
+        if(!msftLogoutSuccess) {
+            ipcEvent.reply(MSFT_OPCODE.REPLY_LOGOUT, MSFT_REPLY_TYPE.ERROR, MSFT_ERROR.NOT_FINISHED)
+        } else if(!msftLogoutSuccessSent) {
+            msftLogoutSuccessSent = true
+            ipcEvent.reply(MSFT_OPCODE.REPLY_LOGOUT, MSFT_REPLY_TYPE.SUCCESS, uuid, isLastAccount)
+        }
+    })
+
+    msftLogoutWindow.webContents.on('did-navigate', (_, uri) => {
+        if(uri.startsWith('https://login.microsoftonline.com/common/oauth2/v2.0/logoutsession')) {
+            msftLogoutSuccess = true
+            setTimeout(() => {
+                if(!msftLogoutSuccessSent) {
+                    msftLogoutSuccessSent = true
+                    ipcEvent.reply(MSFT_OPCODE.REPLY_LOGOUT, MSFT_REPLY_TYPE.SUCCESS, uuid, isLastAccount)
+                }
+
+                if(msftLogoutWindow) {
+                    msftLogoutWindow.close()
+                    msftLogoutWindow = null
+                }
+            }, 5000)
+        }
+    })
+
+    msftLogoutWindow.removeMenu()
+    msftLogoutWindow.loadURL('https://login.microsoftonline.com/common/oauth2/v2.0/logout')
+})
+
+// Keep a global reference of the window object, if you don't, the window will
+// be closed automatically when the JavaScript object is garbage collected.
+
+async function createWindow() {
+
+    console.log('[main] createWindow:start')
+
+    win = new BrowserWindow({
+        width: 980,
+        height: 552,
+        icon: getPlatformIcon('Numapoteicon'),
+        frame: false,
+        webPreferences: {
+            preload: path.join(__dirname, 'app', 'assets', 'js', 'preloader.js'),
+            nodeIntegration: true,
+            contextIsolation: false
+        },
+        backgroundColor: '#171614'
+    })
+    remoteMain.enable(win.webContents)
+    console.log('[main] createWindow:browser-window-created')
+
+    win.once('ready-to-show', () => {
+        console.log('[main] window:ready-to-show')
+    })
+
+    win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+        console.error('[main] webContents:did-fail-load', { errorCode, errorDescription, validatedURL })
+    })
+
+    win.webContents.on('did-finish-load', () => {
+        console.log('[main] webContents:did-finish-load')
+    })
+
+    // Forward renderer console messages to the main process log for easier debugging
+    win.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        try {
+            console.log('[renderer] console-message', { level, message, line, sourceId })
+        } catch (e) {
+            console.log('[renderer] console-message', message)
+        }
+    })
+
+    win.webContents.on('render-process-gone', (event, details) => {
+        console.error('[main] window:webContents-render-process-gone', details)
+    })
+
+    // 背景画像を取得
+    const url = 'https://raw.githubusercontent.com/oogatakun/modPack/refs/heads/main/backgrounds'
+    const backgrounds = await got.get(`${url}/list.json`, { responseType: 'json' })
+        .then(res => res.body?.map(name => `${url}/${name}`))
+        .catch(err => {
+            console.error(err)
+            return []
+        })
+    console.log('[main] createWindow:backgrounds-loaded', Array.isArray(backgrounds) ? backgrounds.length : 0)
+    const background = backgrounds[Math.floor(Math.random() * backgrounds.length)] ?? ''
+
+    const data = {
+        bkid: background,
+        lang: (str, placeHolders) => LangLoader.queryEJS(str, placeHolders),
+        appver: app.getVersion()
+    }
+    Object.entries(data).forEach(([key, val]) => ejse.data(key, val))
+
+    win.webContents.once('did-finish-load', () => {
+        if (deepLinkUrl) {
+            handleDeepLink(deepLinkUrl)
+            deepLinkUrl = null
+        }
+    })
+
+    win.loadURL(pathToFileURL(path.join(__dirname, 'app', 'app.ejs')).toString())
+
+    /*win.once('ready-to-show', () => {
+        win.show()
+    })*/
+
+    win.removeMenu()
+
+    win.resizable = true
+
+    win.on('closed', () => {
+        console.log('[main] window:closed')
+        win = null
+    })
+}
+
+function createMenu() {
+
+    if(process.platform === 'darwin') {
+
+        // Extend default included application menu to continue support for quit keyboard shortcut
+        let applicationSubMenu = {
+            label: 'Application',
+            submenu: [{
+                label: 'About Application',
+                selector: 'orderFrontStandardAboutPanel:'
+            }, {
+                type: 'separator'
+            }, {
+                label: 'Quit',
+                accelerator: 'Command+Q',
+                click: () => {
+                    app.quit()
+                }
+            }]
+        }
+
+        // New edit menu adds support for text-editing keyboard shortcuts
+        let editSubMenu = {
+            label: 'Edit',
+            submenu: [{
+                label: 'Undo',
+                accelerator: 'CmdOrCtrl+Z',
+                selector: 'undo:'
+            }, {
+                label: 'Redo',
+                accelerator: 'Shift+CmdOrCtrl+Z',
+                selector: 'redo:'
+            }, {
+                type: 'separator'
+            }, {
+                label: 'Cut',
+                accelerator: 'CmdOrCtrl+X',
+                selector: 'cut:'
+            }, {
+                label: 'Copy',
+                accelerator: 'CmdOrCtrl+C',
+                selector: 'copy:'
+            }, {
+                label: 'Paste',
+                accelerator: 'CmdOrCtrl+V',
+                selector: 'paste:'
+            }, {
+                label: 'Select All',
+                accelerator: 'CmdOrCtrl+A',
+                selector: 'selectAll:'
+            }]
+        }
+
+        // Bundle submenus into a single template and build a menu object with it
+        let menuTemplate = [applicationSubMenu, editSubMenu]
+        let menuObject = Menu.buildFromTemplate(menuTemplate)
+
+        // Assign it to the application
+        Menu.setApplicationMenu(menuObject)
+
+    }
+
+}
+
+function getPlatformIcon(filename){
+    let ext
+    switch(process.platform) {
+        case 'win32':
+            ext = 'ico'
+            break
+        case 'darwin':
+        case 'linux':
+        default:
+            ext = 'png'
+            break
+    }
+
+    return path.join(__dirname, 'app', 'assets', 'images', `${filename}.${ext}`)
+}
+
+app.on('ready', createWindow)
+app.on('ready', createMenu)
+
+app.on('window-all-closed', () => {
+    console.log('[main] app:window-all-closed')
+    // On macOS it is common for applications and their menu bar
+    // to stay active until the user quits explicitly with Cmd + Q
+    if (process.platform !== 'darwin') {
+        app.quit()
+    }
+})
+
+app.on('activate', () => {
+    // On macOS it's common to re-create a window in the app when the
+    // dock icon is clicked and there are no other windows open.
+    if (win === null) {
+        createWindow()
+    }
+})
