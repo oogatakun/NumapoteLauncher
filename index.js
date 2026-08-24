@@ -2,7 +2,7 @@ const remoteMain = require('@electron/remote/main')
 remoteMain.initialize()
 
 // Requirements
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require('electron')
 const autoUpdater                       = require('electron-updater').autoUpdater
 const ejse                              = require('ejs-electron')
 const isDev                             = require('./app/assets/js/isdev')
@@ -335,6 +335,37 @@ ipcMain.handle(SHELL_OPCODE.TRASH_ITEM, async (event, ...args) => {
             result: false,
             error: error
         }
+    }
+})
+
+// Save an error log to a user-chosen location (native save dialog).
+ipcMain.handle('save-error-log', async (event, content, defaultFileName) => {
+    try {
+        const targetWindow = BrowserWindow.fromWebContents(event.sender) || win
+        const result = await dialog.showSaveDialog(targetWindow, {
+            title: 'エラーログを保存',
+            defaultPath: path.join(app.getPath('desktop'), defaultFileName || 'numapote-error.log'),
+            filters: [{ name: 'Log', extensions: ['log', 'txt'] }]
+        })
+        if(result.canceled || !result.filePath){
+            return { success: false, canceled: true }
+        }
+        await fs.promises.writeFile(result.filePath, content, 'utf8')
+        return { success: true, path: result.filePath }
+    } catch(err) {
+        console.error('[main] save-error-log failed', err)
+        return { success: false, error: err.message }
+    }
+})
+
+// Reveal a file in the OS file manager.
+ipcMain.handle('show-item-in-folder', async (event, targetPath) => {
+    try {
+        shell.showItemInFolder(targetPath)
+        return { success: true }
+    } catch(err) {
+        console.error('[main] show-item-in-folder failed', err)
+        return { success: false }
     }
 })
 
