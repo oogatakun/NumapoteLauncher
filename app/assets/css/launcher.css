@@ -4686,6 +4686,29 @@ form[name='submitSecretQuestion'] p {
     color: rgba(255, 255, 255, 0.75);
 }
 
+/* Error-log export button on the error overlay. */
+#overlayLogExport {
+    background: none;
+    border: 1px solid #ffffff;
+    color: #ffffff;
+    font-family: 'Avenir Medium';
+    font-weight: bold;
+    border-radius: 2px;
+    padding: 4px 14px;
+    margin-left: 10px;
+    cursor: pointer;
+    transition: 0.25s ease;
+}
+#overlayLogExport:hover,
+#overlayLogExport:focus {
+    box-shadow: 0px 0px 10px 0px #fff;
+    outline: none;
+}
+#overlayLogExport:active {
+    border-color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.75);
+}
+
 /* Overlay dismiss option styles. */
 #overlayDismiss {
     font-weight: bold;

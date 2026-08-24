@@ -137,7 +137,59 @@ function setOverlayContent(title, description, acknowledge, dismiss = Lang.query
     document.getElementById('overlayDesc').innerHTML = description
     document.getElementById('overlayAcknowledge').innerHTML = acknowledge
     document.getElementById('overlayDismiss').innerHTML = dismiss
+    // Reset the error-log export button; only showLaunchFailure re-enables it.
+    setLogExportVisible(false)
 }
+
+/**
+ * Show or hide the error-log export button (only meaningful on error overlays).
+ * @param {boolean} visible
+ */
+function setLogExportVisible(visible){
+    const btn = document.getElementById('overlayLogExport')
+    if(btn) btn.style.display = visible ? '' : 'none'
+}
+
+function _nlErrorLogTimestamp(){
+    const d = new Date()
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+}
+
+(function bindLogExport(){
+    const btn = document.getElementById('overlayLogExport')
+    if(!btn) return
+    btn.addEventListener('click', async () => {
+        let content = ''
+        try {
+            content = (window.NLErrorLog && typeof window.NLErrorLog.buildReport === 'function')
+                ? window.NLErrorLog.buildReport()
+                : '(ログモジュールが利用できません)'
+        } catch(e) {
+            content = '(レポート生成に失敗しました: ' + (e && e.message) + ')'
+        }
+        const fileName = `numapote-error-${_nlErrorLogTimestamp()}.log`
+        try {
+            const res = await _ipc.invoke('save-error-log', content, fileName)
+            if(res && res.success){
+                setOverlayContent('保存しました', 'エラーログを保存しました:<br>' + res.path, 'フォルダを開く', 'OK')
+                setOverlayHandler(() => { _ipc.invoke('show-item-in-folder', res.path); toggleOverlay(false) })
+                setDismissHandler(null)
+                toggleOverlay(true, true)
+            } else if(res && res.canceled){
+                // 何もしない（保存キャンセル）
+            } else {
+                setOverlayContent('保存に失敗しました', (res && res.error) ? res.error : '不明なエラーです。', 'OK')
+                setOverlayHandler(null)
+                toggleOverlay(true)
+            }
+        } catch(err) {
+            setOverlayContent('保存に失敗しました', err.message || '不明なエラーです。', 'OK')
+            setOverlayHandler(null)
+            toggleOverlay(true)
+        }
+    })
+})()
 
 /**
  * Set the onclick handler of the overlay acknowledge button.
