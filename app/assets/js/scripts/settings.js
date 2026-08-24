@@ -1925,6 +1925,10 @@ if(settingsCustomCode){
     settingsCustomCode.addEventListener('keydown', (e) => {
         if(e.key === 'Enter'){
             e.preventDefault()
+            // Stop this Enter from bubbling to document: applyCustomCode may open
+            // an overlay whose Enter handler would otherwise fire on this same
+            // keypress and immediately dismiss it.
+            e.stopPropagation()
             applyCustomCode()
         }
     })
