@@ -1708,6 +1708,16 @@ async function applyCustomCode() {
         return
     }
 
+    // Test trigger: typing "error" shows a sample error screen to verify the
+    // error overlay and its log-export button.
+    if(raw.toLowerCase() === 'error'){
+        const testErr = new Error('テスト用エラー: コードタブに "error" が入力されました。')
+        if(typeof showLaunchFailure === 'function'){
+            showLaunchFailure('テストエラー', 'これは動作確認用のサンプルエラー画面です。「ログを出力」ボタンからログを保存できます。', testErr)
+        }
+        return
+    }
+
     let parsed
     // If input looks like a short code (no JSON-like characters), require exact preset key
     if(!raw.startsWith('{') && !raw.startsWith('[') && !raw.includes(':')){
@@ -1915,6 +1925,10 @@ if(settingsCustomCode){
     settingsCustomCode.addEventListener('keydown', (e) => {
         if(e.key === 'Enter'){
             e.preventDefault()
+            // Stop this Enter from bubbling to document: applyCustomCode may open
+            // an overlay whose Enter handler would otherwise fire on this same
+            // keypress and immediately dismiss it.
+            e.stopPropagation()
             applyCustomCode()
         }
     })

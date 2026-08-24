@@ -142,7 +142,7 @@ if (_launchButton) {
             }
         } catch(err) {
             loggerLanding.error('Unhandled error in during launch process.', err)
-            showLaunchFailure(Lang.queryJS('landing.launch.failureTitle'), Lang.queryJS('landing.launch.failureText'))
+            showLaunchFailure(Lang.queryJS('landing.launch.failureTitle'), Lang.queryJS('landing.launch.failureText'), err)
         }
     })
 }
@@ -322,13 +322,32 @@ let serverStatusListener = setInterval(() => refreshServerStatus(true), 300000)
  * @param {string} title The overlay title.
  * @param {string} desc The overlay description.
  */
-function showLaunchFailure(title, desc){
+function showLaunchFailure(title, desc, err = null){
+    // Record error + best-effort context for the exportable report.
+    try {
+        const context = {}
+        try { context['ランチャー'] = 'v' + remote.app.getVersion() } catch(e) { /* ignore */ }
+        try { context['OS'] = `${process.platform} ${require('os').release()} (${process.arch})` } catch(e) { /* ignore */ }
+        try {
+            const sid = ConfigManager.getSelectedServer()
+            if(sid) context['Modパック'] = String(sid)
+        } catch(e) { /* ignore */ }
+        try {
+            const acc = ConfigManager.getSelectedAccount()
+            if(acc && acc.displayName) context['アカウント'] = acc.displayName
+        } catch(e) { /* ignore */ }
+        if(window.NLErrorLog && typeof window.NLErrorLog.setLastError === 'function'){
+            window.NLErrorLog.setLastError({ title, desc, err, context })
+        }
+    } catch(e) { /* never let reporting break error display */ }
+
     setOverlayContent(
         title,
         desc,
         Lang.queryJS('landing.launch.okay')
     )
     setOverlayHandler(null)
+    if(typeof setLogExportVisible === 'function') setLogExportVisible(true)
     toggleOverlay(true)
     toggleLaunchArea(false)
 }
@@ -503,7 +522,7 @@ async function dlAsync(login = true) {
         onDistroRefresh(distro)
     } catch(err) {
         loggerLaunchSuite.error('Unable to refresh distribution index.', err)
-        showLaunchFailure(Lang.queryJS('landing.dlAsync.fatalError'), Lang.queryJS('landing.dlAsync.unableToLoadDistributionIndex'))
+        showLaunchFailure(Lang.queryJS('landing.dlAsync.fatalError'), Lang.queryJS('landing.dlAsync.unableToLoadDistributionIndex'), err)
         return
     }
 
@@ -532,7 +551,7 @@ async function dlAsync(login = true) {
 
     fullRepairModule.childProcess.on('error', (err) => {
         loggerLaunchSuite.error('Error during launch', err)
-        showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringLaunchTitle'), err.message || Lang.queryJS('landing.dlAsync.errorDuringLaunchText'))
+        showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringLaunchTitle'), err.message || Lang.queryJS('landing.dlAsync.errorDuringLaunchText'), err)
     })
     fullRepairModule.childProcess.on('close', (code, _signal) => {
         if(code !== 0){
@@ -687,6 +706,9 @@ async function dlAsync(login = true) {
 
         const gameErrorListener = function(data){
             data = data.trim()
+            if(window.NLErrorLog && typeof window.NLErrorLog.pushLine === 'function' && data){
+                window.NLErrorLog.pushLine('[GAME stderr] ' + data)
+            }
             if(data.indexOf('Could not find or load main class net.minecraft.launchwrapper.Launch') > -1){
                 loggerLaunchSuite.error('Game launch failed, LaunchWrapper was not downloaded properly.')
                 showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringLaunchTitle'), Lang.queryJS('landing.dlAsync.launchWrapperNotDownloaded'))
