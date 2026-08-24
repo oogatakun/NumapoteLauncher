@@ -12,8 +12,15 @@
         return new Date().toISOString()
     }
 
+    // Strip ANSI color escape codes (winston colorize) for a clean report.
+    // eslint-disable-next-line no-control-regex
+    const ANSI_RE = /\[[0-9;]*m/g
+    function stripAnsi(s){
+        return String(s).replace(ANSI_RE, '')
+    }
+
     function push(line){
-        buffer.push(line)
+        buffer.push(stripAnsi(line))
         if(buffer.length > MAX_LINES){
             buffer.splice(0, buffer.length - MAX_LINES)
         }
