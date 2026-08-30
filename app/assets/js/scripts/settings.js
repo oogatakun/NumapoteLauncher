@@ -769,6 +769,35 @@ function resolveSelectedServerLike(distro){
 }
 
 /**
+ * Determine the import target (mc version, loader, mods dir) for the selected pack.
+ * loader is a lowercase Modrinth loader name (fabric/forge/quilt/neoforge) or null
+ * when the pack cannot use mods (vanilla / unknown).
+ */
+async function getModTargetContext(){
+    const id = ConfigManager.getSelectedServer()
+    if(!id) return null
+    const modsDir = path.join(ConfigManager.getInstanceDirectory(), id, 'mods')
+    const ins = ConfigManager.getCustomInstance(id)
+    if(ins){
+        const loader = (ins.loader === 'fabric' || ins.loader === 'forge' || ins.loader === 'quilt' || ins.loader === 'neoforge') ? ins.loader : null
+        return { id, mc: ins.minecraftVersion, loader, modsDir }
+    }
+    const distro = await DistroAPI.getDistribution()
+    const serv = distro ? distro.getServerById(id) : null
+    if(!serv || !serv.rawServer) return null
+    let loader = null
+    try {
+        const { Type } = require('helios-distribution-types')
+        for(const mdl of (serv.modules || [])){
+            const t = mdl.rawModule && mdl.rawModule.type
+            if(t === Type.Fabric){ loader = 'fabric'; break }
+            if(t === Type.Forge || t === Type.ForgeHosted){ loader = 'forge'; break }
+        }
+    } catch(e) { /* ignore */ }
+    return { id, mc: serv.rawServer.minecraftVersion, loader, modsDir }
+}
+
+/**
  * Resolve any located drop-in mods for this server and
  * populate the results onto the UI.
  */
