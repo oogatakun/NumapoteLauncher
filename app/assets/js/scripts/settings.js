@@ -763,7 +763,7 @@ function resolveSelectedServerLike(distro){
     if(serv && serv.rawServer) return serv
     const ins = ConfigManager.getCustomInstance(id)
     if(ins){
-        return { rawServer: { id: ins.id, minecraftVersion: ins.minecraftVersion, name: ins.name }, modules: [] }
+        return { rawServer: { id: ins.id, minecraftVersion: ins.minecraftVersion, name: ins.name, description: '', version: '' }, modules: [] }
     }
     return null
 }
