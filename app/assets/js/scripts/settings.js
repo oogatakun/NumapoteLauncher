@@ -2103,10 +2103,7 @@ async function addModrinthMod(hit, btn){
     try {
         const version = await window.NLModrinth.getBestVersion(hit.projectId, ctx.mc, ctx.loader)
         if(!version){ btn.textContent = '非対応'; return }
-        // Task 6 で collectRequired に差し替え。まずは本体のみ。
-        const files = []
-        const primary = (version.files.find(f => f.primary) || version.files[0])
-        if(primary) files.push({ filename: primary.filename, url: primary.url })
+        const files = await window.NLModrinth.collectRequired(version, ctx.mc, ctx.loader)
         fsx.ensureDirSync(ctx.modsDir)
         let added = 0
         for(const f of files){
