@@ -464,13 +464,32 @@ function setCustomInstanceHandlers(){
             e.stopPropagation()
             const cid = b.getAttribute('cid')
             const ins = ConfigManager.getCustomInstance(cid)
-            setOverlayContent('削除しますか？', `「${(ins && ins.name) || '無題の構成'}」を一覧から削除します。`, '削除する', 'キャンセル')
-            setOverlayHandler(() => {
+            setOverlayContent(
+                '削除しますか？',
+                `「${(ins && ins.name) || '無題の構成'}」を一覧から削除します。<br><br>` +
+                '<label style="cursor:pointer;font-size:13px;"><input type="checkbox" id="deleteFolderChk" style="margin-right:6px;vertical-align:middle;">インスタンスのフォルダ（Mod・設定など）もゴミ箱に移動する</label>',
+                '削除する',
+                'キャンセル'
+            )
+            setOverlayHandler(async () => {
+                const chk = document.getElementById('deleteFolderChk')
+                const delFolder = !!(chk && chk.checked)
                 ConfigManager.removeCustomInstance(cid)
                 if(ConfigManager.getSelectedServer() === cid){
                     ConfigManager.setSelectedServer(null)
                 }
                 ConfigManager.save()
+                if(delFolder){
+                    try {
+                        const { SHELL_OPCODE } = require('./assets/js/ipcconstants')
+                        const dir = require('path').join(ConfigManager.getInstanceDirectory(), cid)
+                        if(require('fs-extra').existsSync(dir)){
+                            await _ipc.invoke(SHELL_OPCODE.TRASH_ITEM, dir)
+                        }
+                    } catch(err){
+                        console.warn('Failed to move instance folder to trash', err)
+                    }
+                }
                 toggleServerSelection(true).then(() => setServerTab('custom'))
             })
             setDismissHandler(null)
