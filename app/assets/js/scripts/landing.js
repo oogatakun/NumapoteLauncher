@@ -513,6 +513,33 @@ async function dlAsync(login = true) {
 
     const loggerLaunchSuite = LoggerUtil.getLogger('LaunchSuite')
 
+    // Custom (user-created) instance path — bypasses the distribution.
+    if(window.NLCustomLaunch && window.NLCustomLaunch.isCustomSelected()){
+        if(login && ConfigManager.getSelectedAccount() == null){
+            loggerLanding.error('You must be logged into an account.')
+            return
+        }
+        const instance = ConfigManager.getCustomInstance(ConfigManager.getSelectedServer())
+        toggleLaunchArea(true)
+        try {
+            proc = await window.NLCustomLaunch.launchCustomInstance(instance)
+            setLaunchDetails(Lang.queryJS('landing.dlAsync.doneEnjoyServer'))
+            const tempListener = function(data){
+                if(GAME_LAUNCH_REGEX.test(data.trim())){
+                    onLoadComplete()
+                }
+            }
+            proc.stdout.on('data', tempListener)
+            proc.stderr.on('data', function(d){
+                if(window.NLErrorLog && d) window.NLErrorLog.pushLine('[GAME stderr] ' + String(d).trim())
+            })
+        } catch(err){
+            loggerLaunchSuite.error('Error during custom instance launch.', err)
+            showLaunchFailure('起動に失敗しました', err.message || 'コンソールを確認してください。', err)
+        }
+        return
+    }
+
     setLaunchDetails(Lang.queryJS('landing.dlAsync.loadingServerInfo'))
 
     let distro
