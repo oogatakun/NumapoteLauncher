@@ -124,6 +124,7 @@ if (_launchButton) {
             if(window.NLCustomLaunch && window.NLCustomLaunch.isCustomSelected()){
                 const instance = ConfigManager.getCustomInstance(ConfigManager.getSelectedServer())
                 const javaOptions = window.NLCustomLaunch.getEffectiveJavaOptions(instance.minecraftVersion)
+                ConfigManager.ensureJavaConfig(instance.id, javaOptions)
                 const jExe = ConfigManager.getEffectiveJavaExecutable(ConfigManager.getSelectedServer())
                 if(jExe == null){
                     await asyncSystemScan(javaOptions)
@@ -545,7 +546,8 @@ async function dlAsync(login = true) {
             proc = await window.NLCustomLaunch.launchCustomInstance(instance)
             setLaunchDetails(Lang.queryJS('landing.dlAsync.doneEnjoyServer'))
             const tempListener = function(data){
-                if(GAME_LAUNCH_REGEX.test(data.trim())){
+                const t = data.trim()
+                if(GAME_LAUNCH_REGEX.test(t) || GAME_JOINED_REGEX.test(t)){
                     toggleLaunchArea(false)
                 }
             }
