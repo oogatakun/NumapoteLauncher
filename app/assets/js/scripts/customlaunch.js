@@ -67,6 +67,19 @@
         setLaunchPercentage(0, 100)
         const proc = new MojangIndexProcessor(commonDir, instance.minecraftVersion)
         await proc.init()
+        const versionData = await proc.getVersionJson()
+
+        // Guard: MC 26.2+ moved native libraries into per-library subdirectories
+        // (e.g. natives_directory/lwjgl, natives_directory/java) — the launcher's
+        // ProcessBuilder only extracts natives into the root natives dir, so those
+        // versions crash with "Failed to locate library: lwjgl.dll". Detect the
+        // new layout from the version's jvm args and abort with a clear message
+        // BEFORE downloading anything.
+        const _jvmArgs = ((versionData.arguments && versionData.arguments.jvm) || []).filter(a => typeof a === 'string')
+        if(_jvmArgs.some(a => /\$\{natives_directory\}\/[a-z]/i.test(a))){
+            throw new Error(`Minecraft ${instance.minecraftVersion} は新しいネイティブライブラリ方式のため、現在このランチャーでは起動できません。1.21.x など少し前のバージョンで作り直してください。`)
+        }
+
         const invalidByCat = await proc.validate(async () => {})
         const assets = Object.values(invalidByCat).reduce((a, b) => a.concat(b), [])
         if(assets.length > 0){
@@ -79,7 +92,6 @@
             setDownloadPercentage(100)
         }
         await proc.postDownload()
-        const versionData = await proc.getVersionJson()
 
         // 2) Ensure a mod configuration exists so ProcessBuilder won't crash.
         if(ConfigManager.getModConfiguration(instance.id) == null){
