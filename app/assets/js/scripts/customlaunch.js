@@ -14,17 +14,31 @@
         return ConfigManager.getCustomInstance(ConfigManager.getSelectedServer()) != null
     }
 
+    // Fallback Java major from the MC version (used only if the Mojang
+    // manifest lookup fails). Mirrors helios-core DistributionFactory.
+    function fallbackJavaMajor(mcVersion){
+        if(mcVersionAtLeast('1.20.5', mcVersion)) return 21
+        if(mcVersionAtLeast('1.17', mcVersion)) return 17
+        if(mcVersionAtLeast('1.16', mcVersion)) return 16
+        return 8
+    }
+
     /**
-     * Mirrors helios-core DistributionFactory.defaultJavaVersion so custom
-     * instances (which have no distribution server) get equivalent
-     * effectiveJavaOptions for Java provisioning/validation.
+     * Determine effectiveJavaOptions for a custom instance. Prefers the exact
+     * Java major declared by the Mojang version manifest (javaVersion.majorVersion),
+     * which is authoritative for newer versions (e.g. MC 26.x requires Java 25 and
+     * passes Java-25-only JVM flags). Falls back to a version heuristic if the
+     * manifest lookup is unavailable.
      */
-    function getEffectiveJavaOptions(mcVersion){
-        let supported, suggestedMajor
-        if(mcVersionAtLeast('1.20.5', mcVersion)){ supported = '>=21.x'; suggestedMajor = 21 }
-        else if(mcVersionAtLeast('1.17', mcVersion)){ supported = '>=17.x'; suggestedMajor = 17 }
-        else if(mcVersionAtLeast('1.16', mcVersion)){ supported = '16.x'; suggestedMajor = 16 }
-        else { supported = '8.x'; suggestedMajor = 8 }
+    async function getEffectiveJavaOptions(mcVersion){
+        let major = null
+        try {
+            if(window.NLCustomVersions && typeof window.NLCustomVersions.fetchRequiredJavaMajor === 'function'){
+                major = await window.NLCustomVersions.fetchRequiredJavaMajor(mcVersion)
+            }
+        } catch(e){ /* fall back below */ }
+        const suggestedMajor = major || fallbackJavaMajor(mcVersion)
+        const supported = suggestedMajor <= 8 ? '8.x' : `>=${suggestedMajor}.x`
         const distribution = process.platform === 'darwin' ? JdkDistribution.CORRETTO : JdkDistribution.TEMURIN
         return { supported, distribution, suggestedMajor }
     }
