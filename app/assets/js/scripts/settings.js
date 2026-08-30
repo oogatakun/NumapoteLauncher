@@ -751,6 +751,53 @@ let CACHE_SETTINGS_MODS_DIR
 let CACHE_DROPIN_MODS
 
 /**
+ * Resolve the selected pack as a distribution-server-like object. Falls back to
+ * a synthetic server for user-created custom instances (which are not in the
+ * distribution), so the Mod tab works for them too.
+ * @param {Object} distro The distribution index.
+ * @returns {Object|null}
+ */
+function resolveSelectedServerLike(distro){
+    const id = ConfigManager.getSelectedServer()
+    const serv = distro ? distro.getServerById(id) : null
+    if(serv && serv.rawServer) return serv
+    const ins = ConfigManager.getCustomInstance(id)
+    if(ins){
+        return { rawServer: { id: ins.id, minecraftVersion: ins.minecraftVersion, name: ins.name, description: '', version: '' }, modules: [] }
+    }
+    return null
+}
+
+/**
+ * Determine the import target (mc version, loader, mods dir) for the selected pack.
+ * loader is a lowercase Modrinth loader name (fabric/forge/quilt/neoforge) or null
+ * when the pack cannot use mods (vanilla / unknown).
+ */
+async function getModTargetContext(){
+    const id = ConfigManager.getSelectedServer()
+    if(!id) return null
+    const modsDir = path.join(ConfigManager.getInstanceDirectory(), id, 'mods')
+    const ins = ConfigManager.getCustomInstance(id)
+    if(ins){
+        const loader = (ins.loader === 'fabric' || ins.loader === 'forge' || ins.loader === 'quilt' || ins.loader === 'neoforge') ? ins.loader : null
+        return { id, mc: ins.minecraftVersion, loader, modsDir }
+    }
+    const distro = await DistroAPI.getDistribution()
+    const serv = distro ? distro.getServerById(id) : null
+    if(!serv || !serv.rawServer) return null
+    let loader = null
+    try {
+        const { Type } = require('helios-distribution-types')
+        for(const mdl of (serv.modules || [])){
+            const t = mdl.rawModule && mdl.rawModule.type
+            if(t === Type.Fabric){ loader = 'fabric'; break }
+            if(t === Type.Forge || t === Type.ForgeHosted){ loader = 'forge'; break }
+        }
+    } catch(e) { /* ignore */ }
+    return { id, mc: serv.rawServer.minecraftVersion, loader, modsDir }
+}
+
+/**
  * Resolve any located drop-in mods for this server and
  * populate the results onto the UI.
  */
@@ -761,7 +808,7 @@ async function resolveDropinModsForUI(){
         CACHE_DROPIN_MODS = []
         return
     }
-    const serv = distro.getServerById(ConfigManager.getSelectedServer())
+    const serv = resolveSelectedServerLike(distro)
     if(!serv || !serv.rawServer){
         document.getElementById('settingsDropinModsContent').innerHTML = ''
         CACHE_DROPIN_MODS = []
@@ -911,7 +958,7 @@ async function resolveShaderpacksForUI(){
         setShadersOptions([], 'OFF')
         return
     }
-    const serv = distro.getServerById(ConfigManager.getSelectedServer())
+    const serv = resolveSelectedServerLike(distro)
     if(!serv || !serv.rawServer){
         setShadersOptions([], 'OFF')
         return
@@ -1088,7 +1135,7 @@ async function loadSelectedServerOnModsTab(){
         }
         return
     }
-    const serv = distro.getServerById(ConfigManager.getSelectedServer())
+    const serv = resolveSelectedServerLike(distro)
     if(!serv || !serv.rawServer){
         for(const el of document.getElementsByClassName('settingsSelServContent')) {
             el.innerHTML = ''
@@ -2001,6 +2048,85 @@ async function revertCustomCode(){
         // Ensure the settings "完了" button is enabled after revert
         try { settingsSaveDisabled(false) } catch (e) { /* ignore if not present */ }
     }
+}
+
+async function openModrinthSearch(){
+    const ctx = await getModTargetContext()
+    if(!ctx || !ctx.loader){
+        setOverlayContent('MOD非対応', 'このパックはMODを導入できません（Fabric/Forge のパックを選んでください）。', 'OK')
+        setOverlayHandler(null); toggleOverlay(true); return
+    }
+    document.getElementById('modrinthSearchInput').value = ''
+    document.getElementById('modrinthResults').innerHTML = ''
+    toggleOverlay(true, true, 'modrinthContent')
+}
+
+function _mrEsc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c]))
+}
+
+async function runModrinthSearch(){
+    const ctx = await getModTargetContext()
+    if(!ctx || !ctx.loader) return
+    const q = document.getElementById('modrinthSearchInput').value.trim()
+    const results = document.getElementById('modrinthResults')
+    results.innerHTML = '<div style="opacity:0.7">検索中...</div>'
+    try {
+        const hits = await window.NLModrinth.search(q, ctx.mc, ctx.loader)
+        if(hits.length === 0){ results.innerHTML = '<div style="opacity:0.7">見つかりませんでした</div>'; return }
+        results.innerHTML = ''
+        for(const h of hits){
+            const row = document.createElement('div')
+            row.className = 'modrinthResult'
+            const icon = h.iconUrl ? `<img src="${_mrEsc(h.iconUrl)}">` : '<img>'
+            row.innerHTML = `${icon}
+                <div class="modrinthResultInfo">
+                    <div class="modrinthResultTitle">${_mrEsc(h.title)}</div>
+                    <div class="modrinthResultMeta">${_mrEsc(h.author)} ・ DL ${Number(h.downloads||0).toLocaleString()}</div>
+                </div>
+                <button class="modrinthAddButton" type="button">追加</button>`
+            const btn = row.getElementsByClassName('modrinthAddButton')[0]
+            btn.onclick = () => addModrinthMod(h, btn)
+            results.appendChild(row)
+        }
+    } catch(err){
+        results.innerHTML = '<div style="opacity:0.7">' + (err.message || '検索に失敗しました') + '</div>'
+    }
+}
+
+async function addModrinthMod(hit, btn){
+    const { downloadFile } = require('helios-core/dl')
+    const fsx = require('fs-extra'); const pth = require('path')
+    const ctx = await getModTargetContext()
+    if(!ctx || !ctx.loader) return
+    btn.setAttribute('disabled', ''); btn.textContent = '追加中...'
+    try {
+        const version = await window.NLModrinth.getBestVersion(hit.projectId, ctx.mc, ctx.loader)
+        if(!version){ btn.textContent = '非対応'; return }
+        const files = await window.NLModrinth.collectRequired(version, ctx.mc, ctx.loader)
+        fsx.ensureDirSync(ctx.modsDir)
+        let added = 0
+        for(const f of files){
+            const dest = pth.join(ctx.modsDir, f.filename)
+            if(!fsx.existsSync(dest)){ await downloadFile(f.url, dest); added++ }
+        }
+        btn.textContent = added > 0 ? '追加済み' : '既にあり'
+        if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+    } catch(err){
+        btn.removeAttribute('disabled'); btn.textContent = '再試行'
+        console.warn('Modrinth add failed', err)
+    }
+}
+
+{
+    const mb = document.getElementById('settingsModrinthButton')
+    if(mb) mb.onclick = () => openModrinthSearch()
+    const sb = document.getElementById('modrinthSearchButton')
+    if(sb) sb.onclick = () => runModrinthSearch()
+    const si = document.getElementById('modrinthSearchInput')
+    if(si) si.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); runModrinthSearch() } })
+    const mc = document.getElementById('modrinthCancel')
+    if(mc) mc.onclick = () => toggleOverlay(false)
 }
 
 if(settingsRevertCustomCode) settingsRevertCustomCode.onclick = revertCustomCode

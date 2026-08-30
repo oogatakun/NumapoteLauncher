@@ -4741,6 +4741,26 @@ form[name='submitSecretQuestion'] p {
     height: 75%;
 }
 
+/* Modrinth search overlay content. */
+#modrinthContent {
+    display: flex; flex-direction: column; align-items: center; height: 75%; width: 460px; margin: 0 auto; color: #fff;
+}
+#modrinthHeader { font-size: 20px; font-weight: bold; margin-bottom: 16px; }
+#modrinthSearchBar { display: flex; gap: 8px; width: 100%; margin-bottom: 12px; }
+#modrinthSearchInput { flex: 1 1 auto; background: rgba(255,255,255,0.85); border: 2px solid rgba(255,255,255,0.75); border-radius: 3px; padding: 6px; }
+#modrinthSearchButton, #modrinthCancel { background: none; border: 1px solid #fff; color: #fff; border-radius: 3px; padding: 6px 14px; cursor: pointer; font-weight: bold; }
+#modrinthSearchButton:hover, #modrinthCancel:hover { box-shadow: 0 0 10px 0 #fff; }
+#modrinthResults { width: 100%; flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+#modrinthActions { margin-top: 12px; }
+.modrinthResult { display: flex; align-items: center; gap: 10px; border: 1px solid rgba(126,126,126,0.57); border-radius: 3px; padding: 8px; background: rgba(0,0,0,0.25); }
+.modrinthResult img { width: 40px; height: 40px; border-radius: 4px; background: rgba(255,255,255,0.1); object-fit: cover; }
+.modrinthResultInfo { flex: 1 1 auto; min-width: 0; }
+.modrinthResultTitle { font-weight: bold; }
+.modrinthResultMeta { font-size: 11px; color: rgba(202,202,202,0.8); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modrinthAddButton { background: none; border: 1px solid #fff; color: #fff; border-radius: 3px; padding: 4px 12px; cursor: pointer; }
+.modrinthAddButton:hover { box-shadow: 0 0 8px 0 #fff; }
+.modrinthAddButton[disabled] { opacity: 0.5; cursor: default; }
+
 /* Custom modpack tabs. */
 #serverTabBar {
     display: flex;
