@@ -487,6 +487,10 @@ async function openCustomInstanceCreate(){
     if(nameEl) nameEl.value = ''
     if(loaderEl) loaderEl.value = 'vanilla'
     if(mcEl) mcEl.innerHTML = '<option value="">読み込み中...</option>'
+    const _lvfReset = document.getElementById('customCreateLoaderVersionField')
+    if(_lvfReset) _lvfReset.style.display = 'none'
+    const _lveReset = document.getElementById('customCreateLoaderVersion')
+    if(_lveReset) _lveReset.innerHTML = '<option value="">選択してください</option>'
     toggleOverlay(true, 'customCreateContent')
     // Load versions
     try {
@@ -500,6 +504,29 @@ async function openCustomInstanceCreate(){
         setOverlayHandler(null)
         toggleOverlay(true)
     }
+    const loaderVerField = document.getElementById('customCreateLoaderVersionField')
+    const loaderVerEl = document.getElementById('customCreateLoaderVersion')
+    async function refreshLoaderVersions(){
+        if(!loaderEl) return
+        if(loaderEl.value === 'fabric'){
+            if(loaderVerField) loaderVerField.style.display = ''
+            if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">読み込み中...</option>'
+            try {
+                const mc = document.getElementById('customCreateMcVersion').value
+                const list = await window.NLCustomVersions.fetchFabricLoaderVersions(mc)
+                if(list.length === 0){
+                    if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">このMC版はFabric非対応</option>'
+                } else if(loaderVerEl){
+                    loaderVerEl.innerHTML = list.map(v => `<option value="${v.version}">${v.version}${v.stable ? '' : ' (beta)'}</option>`).join('')
+                }
+            } catch(e){ if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">取得失敗</option>' }
+        } else {
+            if(loaderVerField) loaderVerField.style.display = 'none'
+        }
+    }
+    if(loaderEl) loaderEl.onchange = refreshLoaderVersions
+    const mcEl2 = document.getElementById('customCreateMcVersion')
+    if(mcEl2) mcEl2.onchange = () => { if(loaderEl && loaderEl.value === 'fabric') refreshLoaderVersions() }
 }
 
 function _genInstanceId(){
@@ -516,13 +543,21 @@ document.getElementById('customCreateConfirm').addEventListener('click', () => {
         toggleOverlay(true)
         return
     }
+    let loaderVersion = ''
+    if(loader === 'fabric'){
+        loaderVersion = document.getElementById('customCreateLoaderVersion').value
+        if(!loaderVersion){
+            setOverlayContent('未選択', 'Fabricローダーのバージョンを選んでください。', 'OK')
+            setOverlayHandler(null); toggleOverlay(true); return
+        }
+    }
     const instance = {
         schema: 1,
         id: _genInstanceId(),
         name,
         minecraftVersion: mc,
-        loader,               // M1 は 'vanilla' のみ
-        loaderVersion: '',
+        loader,
+        loaderVersion,
         created: Date.now(),
         lastPlayed: null
     }
@@ -821,5 +856,6 @@ document.getElementById('windowFilterInput').addEventListener('input', async (e)
     const cfi = document.getElementById('customFilterInput')
     if(cfi) cfi.addEventListener('input', () => applyCustomInstanceFilter())
 }
+
 
 

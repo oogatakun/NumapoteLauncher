@@ -4,6 +4,7 @@
  */
 (function(){
     const VERSION_MANIFEST = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json'
+    const FABRIC_META = 'https://meta.fabricmc.net'
 
     async function fetchReleaseVersions(){
         const res = await fetch(VERSION_MANIFEST, { cache: 'no-store' })
@@ -17,5 +18,22 @@
             .sort((a, b) => new Date(b.releaseTime) - new Date(a.releaseTime))
     }
 
-    window.NLCustomVersions = { fetchReleaseVersions }
+    async function fetchFabricLoaderVersions(mc){
+        const res = await fetch(`${FABRIC_META}/v2/versions/loader/${encodeURIComponent(mc)}`, { cache: 'no-store' })
+        if(res.status === 400 || res.status === 404) return [] // MC未対応
+        if(!res.ok) throw new Error('Fabricローダー一覧の取得に失敗しました (' + res.status + ')')
+        const body = await res.json()
+        // body: [{ loader:{version,stable,...}, intermediary, launcherMeta }, ...]
+        return (Array.isArray(body) ? body : [])
+            .map(e => ({ version: e.loader.version, stable: !!e.loader.stable }))
+    }
+
+    async function fetchFabricProfile(mc, loader){
+        const url = `${FABRIC_META}/v2/versions/loader/${encodeURIComponent(mc)}/${encodeURIComponent(loader)}/profile/json`
+        const res = await fetch(url, { cache: 'no-store' })
+        if(!res.ok) throw new Error('Fabricプロファイルの取得に失敗しました (' + res.status + ')')
+        return await res.json()
+    }
+
+    window.NLCustomVersions = { fetchReleaseVersions, fetchFabricLoaderVersions, fetchFabricProfile }
 })()

@@ -73,11 +73,23 @@
             ConfigManager.save()
         }
 
+        // Loader-specific setup.
+        let modManifest = null
+        let loaderModules = []
+        if(instance.loader === 'fabric'){
+            setLaunchDetails('Fabricを準備中...')
+            const profile = await window.NLCustomVersions.fetchFabricProfile(instance.minecraftVersion, instance.loaderVersion)
+            const fabricModule = await window.NLCustomFabric.installFabric(profile, commonDir)
+            modManifest = profile          // has mainClass + arguments + libraries
+            loaderModules = [fabricModule]  // Type.Fabric synthetic module
+        }
+
         // 3) Build & launch.
         const authUser = ConfigManager.getSelectedAccount()
         const syntheticServer = buildSyntheticServer(instance)
+        syntheticServer.modules = loaderModules
         setLaunchDetails('起動準備中...')
-        const pb = new ProcessBuilder(syntheticServer, versionData, null, authUser, remote.app.getVersion())
+        const pb = new ProcessBuilder(syntheticServer, versionData, modManifest, authUser, remote.app.getVersion())
         const gameProc = pb.build()
 
         // Update lastPlayed
