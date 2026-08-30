@@ -3,6 +3,7 @@
  * Exposed as window.NLModrinth.
  */
 (function(){
+    const { default: got } = require('got')
     const API = 'https://api.modrinth.com/v2'
     function ua(){
         let ver = '0.0.0'
@@ -10,10 +11,15 @@
         return `NumapoteLauncher/${ver} (github.com/oogatakun/NumapoteLauncher)`
     }
     async function getJson(url){
-        const res = await fetch(url, { headers: { 'User-Agent': ua() }, cache: 'no-store' })
-        if(res.status === 429) throw new Error('Modrinthのレート制限です。少し待って再試行してください。')
-        if(!res.ok) throw new Error('Modrinthリクエストに失敗しました (' + res.status + ')')
-        return res.json()
+        let res
+        try {
+            res = await got(url, { headers: { 'user-agent': ua() }, responseType: 'json', throwHttpErrors: false, retry: 0 })
+        } catch(err) {
+            throw new Error('Modrinthへの接続に失敗しました: ' + (err.message || ''))
+        }
+        if(res.statusCode === 429) throw new Error('Modrinthのレート制限です。少し待って再試行してください。')
+        if(res.statusCode < 200 || res.statusCode >= 300) throw new Error('Modrinthリクエストに失敗しました (' + res.statusCode + ')')
+        return res.body
     }
 
     async function search(query, mc, loader, limit = 20){
@@ -44,11 +50,14 @@
     // Collect the mod + its required dependencies (recursive, deduped).
     async function collectRequired(version, mc, loader){
         const out = []
-        const seen = new Set()
+        const seenFiles = new Set()
+        const seenVer = new Set()
         async function walk(ver){
+            const key = ver.versionId || ver.id
+            if(key){ if(seenVer.has(key)) return; seenVer.add(key) }
             const pf = primaryFile(ver.files)
-            if(pf && !seen.has(pf.filename)){
-                seen.add(pf.filename)
+            if(pf && !seenFiles.has(pf.filename)){
+                seenFiles.add(pf.filename)
                 out.push(pf)
             }
             for(const dep of (ver.dependencies || [])){
@@ -56,7 +65,7 @@
                 let depVer = null
                 if(dep.version_id){
                     const dv = await getJson(`${API}/version/${encodeURIComponent(dep.version_id)}`)
-                    depVer = { files: dv.files || [], dependencies: dv.dependencies || [] }
+                    depVer = { versionId: dv.id, files: dv.files || [], dependencies: dv.dependencies || [] }
                 } else if(dep.project_id){
                     depVer = await getBestVersion(dep.project_id, mc, loader)
                 }
