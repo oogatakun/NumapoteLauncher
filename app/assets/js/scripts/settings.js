@@ -2061,6 +2061,10 @@ async function openModrinthSearch(){
     toggleOverlay(true, 'modrinthContent')
 }
 
+function _mrEsc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c]))
+}
+
 async function runModrinthSearch(){
     const ctx = await getModTargetContext()
     if(!ctx || !ctx.loader) return
@@ -2074,11 +2078,11 @@ async function runModrinthSearch(){
         for(const h of hits){
             const row = document.createElement('div')
             row.className = 'modrinthResult'
-            const icon = h.iconUrl ? `<img src="${h.iconUrl}">` : '<img>'
+            const icon = h.iconUrl ? `<img src="${_mrEsc(h.iconUrl)}">` : '<img>'
             row.innerHTML = `${icon}
                 <div class="modrinthResultInfo">
-                    <div class="modrinthResultTitle">${(h.title||'').replace(/</g,'&lt;')}</div>
-                    <div class="modrinthResultMeta">${(h.author||'')} ・ DL ${Number(h.downloads||0).toLocaleString()}</div>
+                    <div class="modrinthResultTitle">${_mrEsc(h.title)}</div>
+                    <div class="modrinthResultMeta">${_mrEsc(h.author)} ・ DL ${Number(h.downloads||0).toLocaleString()}</div>
                 </div>
                 <button class="modrinthAddButton" type="button">追加</button>`
             const btn = row.getElementsByClassName('modrinthAddButton')[0]
