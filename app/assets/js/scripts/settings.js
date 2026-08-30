@@ -2050,4 +2050,82 @@ async function revertCustomCode(){
     }
 }
 
+async function openModrinthSearch(){
+    const ctx = await getModTargetContext()
+    if(!ctx || !ctx.loader){
+        setOverlayContent('MOD非対応', 'このパックはMODを導入できません（Fabric/Forge のパックを選んでください）。', 'OK')
+        setOverlayHandler(null); toggleOverlay(true); return
+    }
+    document.getElementById('modrinthSearchInput').value = ''
+    document.getElementById('modrinthResults').innerHTML = ''
+    toggleOverlay(true, 'modrinthContent')
+}
+
+async function runModrinthSearch(){
+    const ctx = await getModTargetContext()
+    if(!ctx || !ctx.loader) return
+    const q = document.getElementById('modrinthSearchInput').value.trim()
+    const results = document.getElementById('modrinthResults')
+    results.innerHTML = '<div style="opacity:0.7">検索中...</div>'
+    try {
+        const hits = await window.NLModrinth.search(q, ctx.mc, ctx.loader)
+        if(hits.length === 0){ results.innerHTML = '<div style="opacity:0.7">見つかりませんでした</div>'; return }
+        results.innerHTML = ''
+        for(const h of hits){
+            const row = document.createElement('div')
+            row.className = 'modrinthResult'
+            const icon = h.iconUrl ? `<img src="${h.iconUrl}">` : '<img>'
+            row.innerHTML = `${icon}
+                <div class="modrinthResultInfo">
+                    <div class="modrinthResultTitle">${(h.title||'').replace(/</g,'&lt;')}</div>
+                    <div class="modrinthResultMeta">${(h.author||'')} ・ DL ${Number(h.downloads||0).toLocaleString()}</div>
+                </div>
+                <button class="modrinthAddButton" type="button">追加</button>`
+            const btn = row.getElementsByClassName('modrinthAddButton')[0]
+            btn.onclick = () => addModrinthMod(h, btn)
+            results.appendChild(row)
+        }
+    } catch(err){
+        results.innerHTML = '<div style="opacity:0.7">' + (err.message || '検索に失敗しました') + '</div>'
+    }
+}
+
+async function addModrinthMod(hit, btn){
+    const { downloadFile } = require('helios-core/dl')
+    const fsx = require('fs-extra'); const pth = require('path')
+    const ctx = await getModTargetContext()
+    if(!ctx || !ctx.loader) return
+    btn.setAttribute('disabled', ''); btn.textContent = '追加中...'
+    try {
+        const version = await window.NLModrinth.getBestVersion(hit.projectId, ctx.mc, ctx.loader)
+        if(!version){ btn.textContent = '非対応'; return }
+        // Task 6 で collectRequired に差し替え。まずは本体のみ。
+        const files = []
+        const primary = (version.files.find(f => f.primary) || version.files[0])
+        if(primary) files.push({ filename: primary.filename, url: primary.url })
+        fsx.ensureDirSync(ctx.modsDir)
+        let added = 0
+        for(const f of files){
+            const dest = pth.join(ctx.modsDir, f.filename)
+            if(!fsx.existsSync(dest)){ await downloadFile(f.url, dest); added++ }
+        }
+        btn.textContent = added > 0 ? '追加済み' : '既にあり'
+        if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+    } catch(err){
+        btn.removeAttribute('disabled'); btn.textContent = '再試行'
+        console.warn('Modrinth add failed', err)
+    }
+}
+
+{
+    const mb = document.getElementById('settingsModrinthButton')
+    if(mb) mb.onclick = () => openModrinthSearch()
+    const sb = document.getElementById('modrinthSearchButton')
+    if(sb) sb.onclick = () => runModrinthSearch()
+    const si = document.getElementById('modrinthSearchInput')
+    if(si) si.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); runModrinthSearch() } })
+    const mc = document.getElementById('modrinthCancel')
+    if(mc) mc.onclick = () => toggleOverlay(false)
+}
+
 if(settingsRevertCustomCode) settingsRevertCustomCode.onclick = revertCustomCode
