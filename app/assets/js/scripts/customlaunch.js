@@ -5,11 +5,28 @@
  */
 (function(){
     const { MojangIndexProcessor, downloadQueue, getExpectedDownloadSize } = require('helios-core/dl')
+    const { mcVersionAtLeast } = require('helios-core/common')
+    const { JdkDistribution } = require('helios-distribution-types')
     const ProcessBuilder = require('./assets/js/processbuilder')
     const ConfigManager = require('./assets/js/configmanager')
 
     function isCustomSelected(){
         return ConfigManager.getCustomInstance(ConfigManager.getSelectedServer()) != null
+    }
+
+    /**
+     * Mirrors helios-core DistributionFactory.defaultJavaVersion so custom
+     * instances (which have no distribution server) get equivalent
+     * effectiveJavaOptions for Java provisioning/validation.
+     */
+    function getEffectiveJavaOptions(mcVersion){
+        let supported, suggestedMajor
+        if(mcVersionAtLeast('1.20.5', mcVersion)){ supported = '>=21.x'; suggestedMajor = 21 }
+        else if(mcVersionAtLeast('1.17', mcVersion)){ supported = '>=17.x'; suggestedMajor = 17 }
+        else if(mcVersionAtLeast('1.16', mcVersion)){ supported = '16.x'; suggestedMajor = 16 }
+        else { supported = '8.x'; suggestedMajor = 8 }
+        const distribution = process.platform === 'darwin' ? JdkDistribution.CORRETTO : JdkDistribution.TEMURIN
+        return { supported, distribution, suggestedMajor }
     }
 
     /**
@@ -70,5 +87,5 @@
         return gameProc
     }
 
-    window.NLCustomLaunch = { isCustomSelected, launchCustomInstance }
+    window.NLCustomLaunch = { isCustomSelected, launchCustomInstance, getEffectiveJavaOptions }
 })()

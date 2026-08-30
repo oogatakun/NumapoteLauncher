@@ -121,6 +121,26 @@ if (_launchButton) {
     _launchButton.addEventListener('click', async e => {
         loggerLanding.info('Launching game..')
         try {
+            if(window.NLCustomLaunch && window.NLCustomLaunch.isCustomSelected()){
+                const instance = ConfigManager.getCustomInstance(ConfigManager.getSelectedServer())
+                const javaOptions = window.NLCustomLaunch.getEffectiveJavaOptions(instance.minecraftVersion)
+                const jExe = ConfigManager.getEffectiveJavaExecutable(ConfigManager.getSelectedServer())
+                if(jExe == null){
+                    await asyncSystemScan(javaOptions)
+                } else {
+                    setLaunchDetails(Lang.queryJS('landing.launch.pleaseWait'))
+                    toggleLaunchArea(true)
+                    setLaunchPercentage(0, 100)
+                    const details = await validateSelectedJvm(ensureJavaDirIsRoot(jExe), javaOptions.supported)
+                    if(details != null){
+                        await dlAsync()
+                    } else {
+                        await asyncSystemScan(javaOptions)
+                    }
+                }
+                return
+            }
+
             const server = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
             const jExe = ConfigManager.getEffectiveJavaExecutable(ConfigManager.getSelectedServer())
             if(jExe == null){
