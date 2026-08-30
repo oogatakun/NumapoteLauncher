@@ -409,6 +409,63 @@ function populateCustomInstanceListings(){
     setCustomInstanceHandlers()
 }
 
+async function openCustomInstanceCreate(){
+    // Reset fields
+    const nameEl = document.getElementById('customCreateName')
+    const mcEl = document.getElementById('customCreateMcVersion')
+    const loaderEl = document.getElementById('customCreateLoader')
+    if(nameEl) nameEl.value = ''
+    if(loaderEl) loaderEl.value = 'vanilla'
+    if(mcEl) mcEl.innerHTML = '<option value="">読み込み中...</option>'
+    toggleOverlay(true, 'customCreateContent')
+    // Load versions
+    try {
+        const versions = await window.NLCustomVersions.fetchReleaseVersions()
+        if(mcEl){
+            mcEl.innerHTML = versions.map(v => `<option value="${v.id}">${v.id}</option>`).join('')
+        }
+    } catch(err){
+        if(mcEl) mcEl.innerHTML = '<option value="">取得失敗</option>'
+        setOverlayContent('エラー', 'バージョン一覧の取得に失敗しました。ネットワークを確認してください。', 'OK')
+        setOverlayHandler(null)
+        toggleOverlay(true)
+    }
+}
+
+function _genInstanceId(){
+    return 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+}
+
+document.getElementById('customCreateConfirm').addEventListener('click', () => {
+    const name = (document.getElementById('customCreateName').value || '').trim() || '無題の構成'
+    const mc = document.getElementById('customCreateMcVersion').value
+    const loader = document.getElementById('customCreateLoader').value || 'vanilla'
+    if(!mc){
+        setOverlayContent('未選択', 'Minecraftバージョンを選んでください。', 'OK')
+        setOverlayHandler(null)
+        toggleOverlay(true)
+        return
+    }
+    const instance = {
+        schema: 1,
+        id: _genInstanceId(),
+        name,
+        minecraftVersion: mc,
+        loader,               // M1 は 'vanilla' のみ
+        loaderVersion: '',
+        created: Date.now(),
+        lastPlayed: null
+    }
+    ConfigManager.addCustomInstance(instance)
+    ConfigManager.save()
+    // 戻って自作タブを表示
+    toggleServerSelection(true).then(() => setServerTab('custom'))
+})
+
+document.getElementById('customCreateCancel').addEventListener('click', () => {
+    toggleServerSelection(true).then(() => setServerTab('custom'))
+})
+
 function createServerHtml(servers) {
     // ソート
     let sortedServers = sortServers(servers)
@@ -683,5 +740,10 @@ document.getElementById('windowFilterInput').addEventListener('input', async (e)
     const cus = document.getElementById('serverTabCustom')
     if(off) off.addEventListener('click', () => setServerTab('official'))
     if(cus) cus.addEventListener('click', () => setServerTab('custom'))
+}
+
+{
+    const createBtn = document.getElementById('customInstanceCreateButton')
+    if(createBtn) createBtn.addEventListener('click', () => openCustomInstanceCreate())
 }
 

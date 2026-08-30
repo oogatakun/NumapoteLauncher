@@ -4803,6 +4803,29 @@ form[name='submitSecretQuestion'] p {
     border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 11px;
 }
 
+#customCreateContent {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    width: 420px;
+    height: 75%;
+    margin: 0 auto;
+    color: #fff;
+}
+#customCreateHeader { font-size: 20px; font-weight: bold; text-align: center; margin-bottom: 20px; }
+.customCreateField { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+.customCreateField input, .customCreateField select {
+    background: rgba(255,255,255,0.85); border: 2px solid rgba(255,255,255,0.75);
+    border-radius: 3px; padding: 6px;
+}
+#customCreateActions { display: flex; gap: 12px; justify-content: center; margin-top: 10px; }
+#customCreateActions button {
+    background: none; border: 1px solid #fff; color: #fff; border-radius: 3px;
+    padding: 6px 20px; cursor: pointer; font-weight: bold;
+}
+#customCreateActions button:hover { box-shadow: 0 0 10px 0 #fff; }
+
 /* Server selection header. */
 #serverSelectHeader,
 #accountSelectHeader {
