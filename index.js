@@ -369,6 +369,17 @@ ipcMain.handle('show-item-in-folder', async (event, targetPath) => {
     }
 })
 
+// Open a folder in the OS file manager (creating nothing).
+ipcMain.handle('open-folder', async (event, targetPath) => {
+    try {
+        await shell.openPath(targetPath)
+        return { success: true }
+    } catch(err) {
+        console.error('[main] open-folder failed', err)
+        return { success: false, error: err.message }
+    }
+})
+
 ipcMain.on('get-launcher-skin-path', (event) => {
     event.returnValue = app.getPath('appData')
 })

@@ -409,6 +409,57 @@ function populateCustomInstanceListings(){
     setCustomInstanceHandlers()
 }
 
+function setCustomInstanceHandlers(){
+    // Select an instance (click on the row, not on action buttons).
+    Array.from(document.getElementsByClassName('customInstanceListing')).forEach(row => {
+        row.onclick = (e) => {
+            if(e.target.closest('.customInstanceActions')) return
+            const cid = row.getAttribute('cid')
+            ConfigManager.setSelectedServer(cid)
+            ConfigManager.save()
+            const cur = document.querySelector('.customInstanceListing[selected]')
+            if(cur) cur.removeAttribute('selected')
+            row.setAttribute('selected', '')
+            if(typeof updateSelectedServer === 'function'){
+                updateSelectedServer(null) // 自作は distro に無いので null を渡し、表示は下の行で更新
+            }
+            const btn = document.getElementById('server_selection_button')
+            const ins = ConfigManager.getCustomInstance(cid)
+            if(btn && ins) btn.innerHTML = '&#8226; ' + (ins.name || '無題の構成')
+            toggleOverlay(false)
+        }
+    })
+    // Open folder
+    Array.from(document.getElementsByClassName('customOpenFolder')).forEach(b => {
+        b.onclick = async (e) => {
+            e.stopPropagation()
+            const cid = b.getAttribute('cid')
+            const dir = require('path').join(ConfigManager.getInstanceDirectory(), cid)
+            try { require('fs-extra').ensureDirSync(dir) } catch(err) { /* ignore */ }
+            await _ipc.invoke('open-folder', dir)
+        }
+    })
+    // Delete
+    Array.from(document.getElementsByClassName('customDelete')).forEach(b => {
+        b.onclick = (e) => {
+            e.stopPropagation()
+            const cid = b.getAttribute('cid')
+            const ins = ConfigManager.getCustomInstance(cid)
+            setOverlayContent('削除しますか？', `「${(ins && ins.name) || '無題の構成'}」を一覧から削除します。`, '削除する', 'キャンセル')
+            setOverlayHandler(() => {
+                ConfigManager.removeCustomInstance(cid)
+                if(ConfigManager.getSelectedServer() === cid){
+                    ConfigManager.setSelectedServer(null)
+                }
+                ConfigManager.save()
+                toggleServerSelection(true).then(() => setServerTab('custom'))
+            })
+            setDismissHandler(null)
+            toggleOverlay(true, true)
+        }
+    })
+}
+
 async function openCustomInstanceCreate(){
     // Reset fields
     const nameEl = document.getElementById('customCreateName')
