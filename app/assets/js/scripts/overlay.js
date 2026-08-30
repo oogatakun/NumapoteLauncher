@@ -371,6 +371,8 @@ function setServerTab(tab){
         if(officialList) officialList.style.display = 'none'
         if(customList) customList.style.display = ''
         if(filter) filter.style.display = 'none'
+        const cfi = document.getElementById('customFilterInput')
+        if(cfi) cfi.value = ''
         populateCustomInstanceListings()
     } else {
         if(off) off.setAttribute('selected', '')
@@ -407,6 +409,20 @@ function populateCustomInstanceListings(){
     }
     el.innerHTML = html
     setCustomInstanceHandlers()
+    applyCustomInstanceFilter()
+}
+
+/**
+ * Filter the custom instance listings by name using the 絞り込み input.
+ */
+function applyCustomInstanceFilter(){
+    const inp = document.getElementById('customFilterInput')
+    const value = inp ? kanaToHira(inp.value.toLowerCase()) : ''
+    Array.from(document.getElementsByClassName('customInstanceListing')).forEach(row => {
+        const nameEl = row.getElementsByClassName('customInstanceName')[0]
+        const name = nameEl ? kanaToHira(nameEl.textContent.toLowerCase()) : ''
+        row.style.display = name.indexOf(value) >= 0 ? '' : 'none'
+    })
 }
 
 function setCustomInstanceHandlers(){
@@ -800,4 +816,10 @@ document.getElementById('windowFilterInput').addEventListener('input', async (e)
     const createBtn = document.getElementById('customInstanceCreateButton')
     if(createBtn) createBtn.addEventListener('click', () => openCustomInstanceCreate())
 }
+
+{
+    const cfi = document.getElementById('customFilterInput')
+    if(cfi) cfi.addEventListener('input', () => applyCustomInstanceFilter())
+}
+
 
