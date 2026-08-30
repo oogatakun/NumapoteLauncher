@@ -420,9 +420,7 @@ function setCustomInstanceHandlers(){
             const cur = document.querySelector('.customInstanceListing[selected]')
             if(cur) cur.removeAttribute('selected')
             row.setAttribute('selected', '')
-            if(typeof updateSelectedServer === 'function'){
-                updateSelectedServer(null) // 自作は distro に無いので null を渡し、表示は下の行で更新
-            }
+            if(typeof setLaunchEnabled === 'function'){ setLaunchEnabled(true) }
             const btn = document.getElementById('server_selection_button')
             const ins = ConfigManager.getCustomInstance(cid)
             if(btn && ins) btn.innerHTML = '&#8226; ' + (ins.name || '無題の構成')
@@ -436,7 +434,12 @@ function setCustomInstanceHandlers(){
             const cid = b.getAttribute('cid')
             const dir = require('path').join(ConfigManager.getInstanceDirectory(), cid)
             try { require('fs-extra').ensureDirSync(dir) } catch(err) { /* ignore */ }
-            await _ipc.invoke('open-folder', dir)
+            const res = await _ipc.invoke('open-folder', dir)
+            if(res && !res.success){
+                setOverlayContent('フォルダを開けません', (res && res.error) ? res.error : '不明なエラーです。', 'OK')
+                setOverlayHandler(null)
+                toggleOverlay(true)
+            }
         }
     })
     // Delete
