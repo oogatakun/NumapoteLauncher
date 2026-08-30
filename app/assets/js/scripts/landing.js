@@ -121,6 +121,27 @@ if (_launchButton) {
     _launchButton.addEventListener('click', async e => {
         loggerLanding.info('Launching game..')
         try {
+            if(window.NLCustomLaunch && window.NLCustomLaunch.isCustomSelected()){
+                const instance = ConfigManager.getCustomInstance(ConfigManager.getSelectedServer())
+                const javaOptions = window.NLCustomLaunch.getEffectiveJavaOptions(instance.minecraftVersion)
+                ConfigManager.ensureJavaConfig(instance.id, javaOptions)
+                const jExe = ConfigManager.getEffectiveJavaExecutable(ConfigManager.getSelectedServer())
+                if(jExe == null){
+                    await asyncSystemScan(javaOptions)
+                } else {
+                    setLaunchDetails(Lang.queryJS('landing.launch.pleaseWait'))
+                    toggleLaunchArea(true)
+                    setLaunchPercentage(0, 100)
+                    const details = await validateSelectedJvm(ensureJavaDirIsRoot(jExe), javaOptions.supported)
+                    if(details != null){
+                        await dlAsync()
+                    } else {
+                        await asyncSystemScan(javaOptions)
+                    }
+                }
+                return
+            }
+
             const server = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
             const jExe = ConfigManager.getEffectiveJavaExecutable(ConfigManager.getSelectedServer())
             if(jExe == null){
@@ -512,6 +533,34 @@ async function dlAsync(login = true) {
     // launching the game.
 
     const loggerLaunchSuite = LoggerUtil.getLogger('LaunchSuite')
+
+    // Custom (user-created) instance path — bypasses the distribution.
+    if(window.NLCustomLaunch && window.NLCustomLaunch.isCustomSelected()){
+        if(login && ConfigManager.getSelectedAccount() == null){
+            loggerLanding.error('You must be logged into an account.')
+            return
+        }
+        const instance = ConfigManager.getCustomInstance(ConfigManager.getSelectedServer())
+        toggleLaunchArea(true)
+        try {
+            proc = await window.NLCustomLaunch.launchCustomInstance(instance)
+            setLaunchDetails(Lang.queryJS('landing.dlAsync.doneEnjoyServer'))
+            const tempListener = function(data){
+                const t = data.trim()
+                if(GAME_LAUNCH_REGEX.test(t) || GAME_JOINED_REGEX.test(t)){
+                    toggleLaunchArea(false)
+                }
+            }
+            proc.stdout.on('data', tempListener)
+            proc.stderr.on('data', function(d){
+                if(window.NLErrorLog && d) window.NLErrorLog.pushLine('[GAME stderr] ' + String(d).trim())
+            })
+        } catch(err){
+            loggerLaunchSuite.error('Error during custom instance launch.', err)
+            showLaunchFailure('起動に失敗しました', err.message || 'コンソールを確認してください。', err)
+        }
+        return
+    }
 
     setLaunchDetails(Lang.queryJS('landing.dlAsync.loadingServerInfo'))
 

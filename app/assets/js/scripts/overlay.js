@@ -356,6 +356,170 @@ async function populateServerListings(){
     createServerHtml(servers)
 }
 
+let activeServerTab = 'official'
+
+function setServerTab(tab){
+    activeServerTab = tab
+    const off = document.getElementById('serverTabOfficial')
+    const cus = document.getElementById('serverTabCustom')
+    const officialList = document.getElementById('serverSelectListScrollable')
+    const customList = document.getElementById('customInstanceList')
+    const filter = document.getElementById('filterControls')
+    if(tab === 'custom'){
+        if(cus) cus.setAttribute('selected', '')
+        if(off) off.removeAttribute('selected')
+        if(officialList) officialList.style.display = 'none'
+        if(customList) customList.style.display = ''
+        if(filter) filter.style.display = 'none'
+        populateCustomInstanceListings()
+    } else {
+        if(off) off.setAttribute('selected', '')
+        if(cus) cus.removeAttribute('selected')
+        if(officialList) officialList.style.display = ''
+        if(customList) customList.style.display = 'none'
+        if(filter) filter.style.display = ''
+    }
+}
+
+function populateCustomInstanceListings(){
+    const el = document.getElementById('customInstanceListScrollable')
+    if(!el) return
+    const instances = ConfigManager.getCustomInstances()
+    const selected = ConfigManager.getSelectedServer()
+    if(instances.length === 0){
+        el.innerHTML = '<div style="width:100%;text-align:center;opacity:0.7">まだ自作パックがありません</div>'
+        return
+    }
+    let html = ''
+    for(const ins of instances){
+        const loaderLabel = ins.loader === 'vanilla' ? 'バニラ' : `${ins.loader} ${ins.loaderVersion}`
+        const nameEsc = (ins.name || '無題の構成').replace(/</g, '&lt;')
+        html += `<div class="customInstanceListing" cid="${ins.id}" ${ins.id === selected ? 'selected' : ''}>
+            <div>
+                <div class="customInstanceName">${nameEsc}</div>
+                <div class="customInstanceMeta">${ins.minecraftVersion} / ${loaderLabel}</div>
+            </div>
+            <div class="customInstanceActions">
+                <button class="customOpenFolder" cid="${ins.id}" type="button">フォルダ</button>
+                <button class="customDelete" cid="${ins.id}" type="button">削除</button>
+            </div>
+        </div>`
+    }
+    el.innerHTML = html
+    setCustomInstanceHandlers()
+}
+
+function setCustomInstanceHandlers(){
+    // Select an instance (click on the row, not on action buttons).
+    Array.from(document.getElementsByClassName('customInstanceListing')).forEach(row => {
+        row.onclick = (e) => {
+            if(e.target.closest('.customInstanceActions')) return
+            const cid = row.getAttribute('cid')
+            ConfigManager.setSelectedServer(cid)
+            ConfigManager.save()
+            const cur = document.querySelector('.customInstanceListing[selected]')
+            if(cur) cur.removeAttribute('selected')
+            row.setAttribute('selected', '')
+            if(typeof setLaunchEnabled === 'function'){ setLaunchEnabled(true) }
+            const btn = document.getElementById('server_selection_button')
+            const ins = ConfigManager.getCustomInstance(cid)
+            if(btn && ins) btn.innerHTML = '&#8226; ' + (ins.name || '無題の構成')
+            toggleOverlay(false)
+        }
+    })
+    // Open folder
+    Array.from(document.getElementsByClassName('customOpenFolder')).forEach(b => {
+        b.onclick = async (e) => {
+            e.stopPropagation()
+            const cid = b.getAttribute('cid')
+            const dir = require('path').join(ConfigManager.getInstanceDirectory(), cid)
+            try { require('fs-extra').ensureDirSync(dir) } catch(err) { /* ignore */ }
+            const res = await _ipc.invoke('open-folder', dir)
+            if(res && !res.success){
+                setOverlayContent('フォルダを開けません', (res && res.error) ? res.error : '不明なエラーです。', 'OK')
+                setOverlayHandler(null)
+                toggleOverlay(true)
+            }
+        }
+    })
+    // Delete
+    Array.from(document.getElementsByClassName('customDelete')).forEach(b => {
+        b.onclick = (e) => {
+            e.stopPropagation()
+            const cid = b.getAttribute('cid')
+            const ins = ConfigManager.getCustomInstance(cid)
+            setOverlayContent('削除しますか？', `「${(ins && ins.name) || '無題の構成'}」を一覧から削除します。`, '削除する', 'キャンセル')
+            setOverlayHandler(() => {
+                ConfigManager.removeCustomInstance(cid)
+                if(ConfigManager.getSelectedServer() === cid){
+                    ConfigManager.setSelectedServer(null)
+                }
+                ConfigManager.save()
+                toggleServerSelection(true).then(() => setServerTab('custom'))
+            })
+            setDismissHandler(null)
+            toggleOverlay(true, true)
+        }
+    })
+}
+
+async function openCustomInstanceCreate(){
+    // Reset fields
+    const nameEl = document.getElementById('customCreateName')
+    const mcEl = document.getElementById('customCreateMcVersion')
+    const loaderEl = document.getElementById('customCreateLoader')
+    if(nameEl) nameEl.value = ''
+    if(loaderEl) loaderEl.value = 'vanilla'
+    if(mcEl) mcEl.innerHTML = '<option value="">読み込み中...</option>'
+    toggleOverlay(true, 'customCreateContent')
+    // Load versions
+    try {
+        const versions = await window.NLCustomVersions.fetchReleaseVersions()
+        if(mcEl){
+            mcEl.innerHTML = versions.map(v => `<option value="${v.id}">${v.id}</option>`).join('')
+        }
+    } catch(err){
+        if(mcEl) mcEl.innerHTML = '<option value="">取得失敗</option>'
+        setOverlayContent('エラー', 'バージョン一覧の取得に失敗しました。ネットワークを確認してください。', 'OK')
+        setOverlayHandler(null)
+        toggleOverlay(true)
+    }
+}
+
+function _genInstanceId(){
+    return 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+}
+
+document.getElementById('customCreateConfirm').addEventListener('click', () => {
+    const name = (document.getElementById('customCreateName').value || '').trim() || '無題の構成'
+    const mc = document.getElementById('customCreateMcVersion').value
+    const loader = document.getElementById('customCreateLoader').value || 'vanilla'
+    if(!mc){
+        setOverlayContent('未選択', 'Minecraftバージョンを選んでください。', 'OK')
+        setOverlayHandler(null)
+        toggleOverlay(true)
+        return
+    }
+    const instance = {
+        schema: 1,
+        id: _genInstanceId(),
+        name,
+        minecraftVersion: mc,
+        loader,               // M1 は 'vanilla' のみ
+        loaderVersion: '',
+        created: Date.now(),
+        lastPlayed: null
+    }
+    ConfigManager.addCustomInstance(instance)
+    ConfigManager.save()
+    // 戻って自作タブを表示
+    toggleServerSelection(true).then(() => setServerTab('custom'))
+})
+
+document.getElementById('customCreateCancel').addEventListener('click', () => {
+    toggleServerSelection(true).then(() => setServerTab('custom'))
+})
+
 function createServerHtml(servers) {
     // ソート
     let sortedServers = sortServers(servers)
@@ -624,4 +788,16 @@ document.getElementById('windowFilterInput').addEventListener('input', async (e)
         }
     })
 })
+
+{
+    const off = document.getElementById('serverTabOfficial')
+    const cus = document.getElementById('serverTabCustom')
+    if(off) off.addEventListener('click', () => setServerTab('official'))
+    if(cus) cus.addEventListener('click', () => setServerTab('custom'))
+}
+
+{
+    const createBtn = document.getElementById('customInstanceCreateButton')
+    if(createBtn) createBtn.addEventListener('click', () => openCustomInstanceCreate())
+}
 

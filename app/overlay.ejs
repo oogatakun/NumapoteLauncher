@@ -1,6 +1,10 @@
 <div id="overlayContainer" style="display: none;">
     <div id="serverSelectContent" style="display: none;">
         <span id="serverSelectHeader"><%- lang('overlay.serverSelectHeader') %></span>
+        <div id="serverTabBar">
+            <button id="serverTabOfficial" class="serverTab" type="button" selected>公式</button>
+            <button id="serverTabCustom" class="serverTab" type="button">自作</button>
+        </div>
         <div id="filterControls">
             <input type="text" id="filterInput" placeholder="絞り込み">
             <button id="serverLayoutToggle" title="表示切替" type="button">2列</button>
@@ -9,12 +13,39 @@
             <div id="serverSelectListScrollable">
                 <!-- Server listings populated here. -->
             </div>
+            <div id="customInstanceList" style="display: none;">
+                <div id="customInstanceListScrollable">
+                    <!-- Custom instances populated here. -->
+                </div>
+                <button id="customInstanceCreateButton" type="button">＋ 新規作成</button>
+            </div>
         </div>
         <div id="serverSelectActions">
             <button id="serverSelectConfirm" class="overlayKeybindEnter" type="submit"><%- lang('overlay.serverSelectConfirm') %></button>
             <div id="serverSelectCancelWrapper">
                 <button id="serverSelectCancel" class="overlayKeybindEsc"><%- lang('overlay.serverSelectCancel') %></button>
             </div>
+        </div>
+    </div>
+    <div id="customCreateContent" style="display: none;">
+        <span id="customCreateHeader">自作パックを作成</span>
+        <div class="customCreateField">
+            <label for="customCreateName">名前</label>
+            <input type="text" id="customCreateName" placeholder="例: 自分のFabric構成">
+        </div>
+        <div class="customCreateField">
+            <label for="customCreateMcVersion">Minecraftバージョン</label>
+            <select id="customCreateMcVersion"><option value="">読み込み中...</option></select>
+        </div>
+        <div class="customCreateField">
+            <label for="customCreateLoader">ローダー</label>
+            <select id="customCreateLoader">
+                <option value="vanilla">なし（バニラ）</option>
+            </select>
+        </div>
+        <div id="customCreateActions">
+            <button id="customCreateConfirm" type="button">作成</button>
+            <button id="customCreateCancel" type="button">キャンセル</button>
         </div>
     </div>
     <div id="windowSelectContent" style="display: none;">
