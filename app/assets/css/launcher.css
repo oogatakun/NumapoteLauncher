@@ -4762,11 +4762,20 @@ form[name='submitSecretQuestion'] p {
     border-color: #fff;
 }
 .serverTab:hover { opacity: 1; }
+/* Custom instance list column: keep filter + list + create button within
+   the centered #serverSelectList box so nothing overflows up into the tabs. */
+#customInstanceList {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 0;
+    max-height: 100%;
+}
 #customInstanceListScrollable {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    max-height: 260px;
+    max-height: 170px;
     overflow-y: auto;
     width: 420px;
 }
@@ -4777,6 +4786,8 @@ form[name='submitSecretQuestion'] p {
     padding: 6px;
     border-radius: 3px;
     border: 2px solid rgba(255, 255, 255, 0.75);
+    box-sizing: border-box;
+    flex: 0 0 auto;
 }
 #customInstanceCreateButton {
     margin-top: 10px;
