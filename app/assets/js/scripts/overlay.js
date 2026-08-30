@@ -356,6 +356,59 @@ async function populateServerListings(){
     createServerHtml(servers)
 }
 
+let activeServerTab = 'official'
+
+function setServerTab(tab){
+    activeServerTab = tab
+    const off = document.getElementById('serverTabOfficial')
+    const cus = document.getElementById('serverTabCustom')
+    const officialList = document.getElementById('serverSelectListScrollable')
+    const customList = document.getElementById('customInstanceList')
+    const filter = document.getElementById('filterControls')
+    if(tab === 'custom'){
+        if(cus) cus.setAttribute('selected', '')
+        if(off) off.removeAttribute('selected')
+        if(officialList) officialList.style.display = 'none'
+        if(customList) customList.style.display = ''
+        if(filter) filter.style.display = 'none'
+        populateCustomInstanceListings()
+    } else {
+        if(off) off.setAttribute('selected', '')
+        if(cus) cus.removeAttribute('selected')
+        if(officialList) officialList.style.display = ''
+        if(customList) customList.style.display = 'none'
+        if(filter) filter.style.display = ''
+    }
+}
+
+function populateCustomInstanceListings(){
+    const el = document.getElementById('customInstanceListScrollable')
+    if(!el) return
+    const instances = ConfigManager.getCustomInstances()
+    const selected = ConfigManager.getSelectedServer()
+    if(instances.length === 0){
+        el.innerHTML = '<div style="width:100%;text-align:center;opacity:0.7">まだ自作パックがありません</div>'
+        return
+    }
+    let html = ''
+    for(const ins of instances){
+        const loaderLabel = ins.loader === 'vanilla' ? 'バニラ' : `${ins.loader} ${ins.loaderVersion}`
+        const nameEsc = (ins.name || '無題の構成').replace(/</g, '&lt;')
+        html += `<div class="customInstanceListing" cid="${ins.id}" ${ins.id === selected ? 'selected' : ''}>
+            <div>
+                <div class="customInstanceName">${nameEsc}</div>
+                <div class="customInstanceMeta">${ins.minecraftVersion} / ${loaderLabel}</div>
+            </div>
+            <div class="customInstanceActions">
+                <button class="customOpenFolder" cid="${ins.id}" type="button">フォルダ</button>
+                <button class="customDelete" cid="${ins.id}" type="button">削除</button>
+            </div>
+        </div>`
+    }
+    el.innerHTML = html
+    setCustomInstanceHandlers()
+}
+
 function createServerHtml(servers) {
     // ソート
     let sortedServers = sortServers(servers)
@@ -624,4 +677,11 @@ document.getElementById('windowFilterInput').addEventListener('input', async (e)
         }
     })
 })
+
+{
+    const off = document.getElementById('serverTabOfficial')
+    const cus = document.getElementById('serverTabCustom')
+    if(off) off.addEventListener('click', () => setServerTab('official'))
+    if(cus) cus.addEventListener('click', () => setServerTab('custom'))
+}
 

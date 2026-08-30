@@ -4741,6 +4741,68 @@ form[name='submitSecretQuestion'] p {
     height: 75%;
 }
 
+/* Custom modpack tabs. */
+#serverTabBar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.serverTab {
+    background: none;
+    border: 1px solid rgba(126, 126, 126, 0.57);
+    color: #fff;
+    padding: 4px 16px;
+    border-radius: 3px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: 0.2s ease;
+}
+.serverTab[selected] {
+    opacity: 1;
+    border-color: #fff;
+}
+.serverTab:hover { opacity: 1; }
+#customInstanceListScrollable {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+    width: 420px;
+}
+#customInstanceCreateButton {
+    margin-top: 10px;
+    background: none;
+    border: 1px solid #fff;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+}
+#customInstanceCreateButton:hover { box-shadow: 0 0 10px 0 #fff; }
+.customInstanceListing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #fff;
+    border: 1px solid rgba(126, 126, 126, 0.57);
+    border-radius: 3px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    opacity: 0.7;
+    transition: 0.2s ease;
+}
+.customInstanceListing[selected], .customInstanceListing:hover { opacity: 1; border-color: #fff; }
+.customInstanceMeta { font-size: 11px; color: rgba(202,202,202,0.8); }
+.customInstanceActions { display: flex; gap: 6px; }
+.customInstanceActions button {
+    background: none; border: 1px solid rgba(126,126,126,0.57); color: #fff;
+    border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 11px;
+}
+
 /* Server selection header. */
 #serverSelectHeader,
 #accountSelectHeader {

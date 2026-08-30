@@ -1,6 +1,10 @@
 <div id="overlayContainer" style="display: none;">
     <div id="serverSelectContent" style="display: none;">
         <span id="serverSelectHeader"><%- lang('overlay.serverSelectHeader') %></span>
+        <div id="serverTabBar">
+            <button id="serverTabOfficial" class="serverTab" type="button" selected>公式</button>
+            <button id="serverTabCustom" class="serverTab" type="button">自作</button>
+        </div>
         <div id="filterControls">
             <input type="text" id="filterInput" placeholder="絞り込み">
             <button id="serverLayoutToggle" title="表示切替" type="button">2列</button>
@@ -8,6 +12,12 @@
         <div id="serverSelectList">
             <div id="serverSelectListScrollable">
                 <!-- Server listings populated here. -->
+            </div>
+            <div id="customInstanceList" style="display: none;">
+                <div id="customInstanceListScrollable">
+                    <!-- Custom instances populated here. -->
+                </div>
+                <button id="customInstanceCreateButton" type="button">＋ 新規作成</button>
             </div>
         </div>
         <div id="serverSelectActions">
