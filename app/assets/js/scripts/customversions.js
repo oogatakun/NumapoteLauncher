@@ -35,5 +35,22 @@
         return await res.json()
     }
 
-    window.NLCustomVersions = { fetchReleaseVersions, fetchFabricLoaderVersions, fetchFabricProfile }
+    // The Java major version a given MC release requires, per its Mojang
+    // version JSON (javaVersion.majorVersion). Returns null if unavailable.
+    async function fetchRequiredJavaMajor(mc){
+        try {
+            const res = await fetch(VERSION_MANIFEST, { cache: 'no-store' })
+            if(!res.ok) return null
+            const body = await res.json()
+            const entry = (Array.isArray(body.versions) ? body.versions : []).find(v => v.id === mc)
+            if(!entry || !entry.url) return null
+            const vj = await fetch(entry.url, { cache: 'no-store' }).then(r => r.ok ? r.json() : null)
+            if(vj && vj.javaVersion && vj.javaVersion.majorVersion) return vj.javaVersion.majorVersion
+            return null
+        } catch(e){
+            return null
+        }
+    }
+
+    window.NLCustomVersions = { fetchReleaseVersions, fetchFabricLoaderVersions, fetchFabricProfile, fetchRequiredJavaMajor }
 })()

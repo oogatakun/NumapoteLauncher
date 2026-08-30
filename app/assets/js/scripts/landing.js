@@ -123,7 +123,7 @@ if (_launchButton) {
         try {
             if(window.NLCustomLaunch && window.NLCustomLaunch.isCustomSelected()){
                 const instance = ConfigManager.getCustomInstance(ConfigManager.getSelectedServer())
-                const javaOptions = window.NLCustomLaunch.getEffectiveJavaOptions(instance.minecraftVersion)
+                const javaOptions = await window.NLCustomLaunch.getEffectiveJavaOptions(instance.minecraftVersion)
                 ConfigManager.ensureJavaConfig(instance.id, javaOptions)
                 const jExe = ConfigManager.getEffectiveJavaExecutable(ConfigManager.getSelectedServer())
                 if(jExe == null){
@@ -1329,3 +1329,4 @@ function loadManualData(server) {
         resolve(manualMods)
     })
 }
+
