@@ -4770,6 +4770,14 @@ form[name='submitSecretQuestion'] p {
     overflow-y: auto;
     width: 420px;
 }
+#customFilterInput {
+    width: 420px;
+    margin-bottom: 10px;
+    background-color: rgba(255, 255, 255, 0.75);
+    padding: 6px;
+    border-radius: 3px;
+    border: 2px solid rgba(255, 255, 255, 0.75);
+}
 #customInstanceCreateButton {
     margin-top: 10px;
     background: none;
