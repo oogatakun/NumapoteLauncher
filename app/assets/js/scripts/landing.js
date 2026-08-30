@@ -526,7 +526,7 @@ async function dlAsync(login = true) {
             setLaunchDetails(Lang.queryJS('landing.dlAsync.doneEnjoyServer'))
             const tempListener = function(data){
                 if(GAME_LAUNCH_REGEX.test(data.trim())){
-                    onLoadComplete()
+                    toggleLaunchArea(false)
                 }
             }
             proc.stdout.on('data', tempListener)

@@ -4,7 +4,7 @@
  * use the launch helpers/globals defined by landing.js at call time.
  */
 (function(){
-    const { MojangIndexProcessor, downloadQueue } = require('helios-core/dl')
+    const { MojangIndexProcessor, downloadQueue, getExpectedDownloadSize } = require('helios-core/dl')
     const ProcessBuilder = require('./assets/js/processbuilder')
     const ConfigManager = require('./assets/js/configmanager')
 
@@ -40,9 +40,10 @@
         const assets = Object.values(invalidByCat).reduce((a, b) => a.concat(b), [])
         if(assets.length > 0){
             setLaunchDetails('ダウンロード中...')
+            const totalSize = getExpectedDownloadSize(assets)
             await downloadQueue(assets, received => {
-                // Rough progress; totalStages-based progress can be refined later.
-                setDownloadPercentage(Math.min(99, received))
+                const pct = totalSize > 0 ? Math.floor((received / totalSize) * 100) : 0
+                setDownloadPercentage(Math.min(99, pct))
             })
             setDownloadPercentage(100)
         }
