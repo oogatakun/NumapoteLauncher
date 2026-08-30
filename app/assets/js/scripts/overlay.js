@@ -487,6 +487,10 @@ async function openCustomInstanceCreate(){
     if(nameEl) nameEl.value = ''
     if(loaderEl) loaderEl.value = 'vanilla'
     if(mcEl) mcEl.innerHTML = '<option value="">読み込み中...</option>'
+    const _lvfReset = document.getElementById('customCreateLoaderVersionField')
+    if(_lvfReset) _lvfReset.style.display = 'none'
+    const _lveReset = document.getElementById('customCreateLoaderVersion')
+    if(_lveReset) _lveReset.innerHTML = '<option value="">選択してください</option>'
     toggleOverlay(true, 'customCreateContent')
     // Load versions
     try {
