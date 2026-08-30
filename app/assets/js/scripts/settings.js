@@ -751,6 +751,24 @@ let CACHE_SETTINGS_MODS_DIR
 let CACHE_DROPIN_MODS
 
 /**
+ * Resolve the selected pack as a distribution-server-like object. Falls back to
+ * a synthetic server for user-created custom instances (which are not in the
+ * distribution), so the Mod tab works for them too.
+ * @param {Object} distro The distribution index.
+ * @returns {Object|null}
+ */
+function resolveSelectedServerLike(distro){
+    const id = ConfigManager.getSelectedServer()
+    const serv = distro ? distro.getServerById(id) : null
+    if(serv && serv.rawServer) return serv
+    const ins = ConfigManager.getCustomInstance(id)
+    if(ins){
+        return { rawServer: { id: ins.id, minecraftVersion: ins.minecraftVersion, name: ins.name }, modules: [] }
+    }
+    return null
+}
+
+/**
  * Resolve any located drop-in mods for this server and
  * populate the results onto the UI.
  */
@@ -761,7 +779,7 @@ async function resolveDropinModsForUI(){
         CACHE_DROPIN_MODS = []
         return
     }
-    const serv = distro.getServerById(ConfigManager.getSelectedServer())
+    const serv = resolveSelectedServerLike(distro)
     if(!serv || !serv.rawServer){
         document.getElementById('settingsDropinModsContent').innerHTML = ''
         CACHE_DROPIN_MODS = []
@@ -911,7 +929,7 @@ async function resolveShaderpacksForUI(){
         setShadersOptions([], 'OFF')
         return
     }
-    const serv = distro.getServerById(ConfigManager.getSelectedServer())
+    const serv = resolveSelectedServerLike(distro)
     if(!serv || !serv.rawServer){
         setShadersOptions([], 'OFF')
         return
@@ -1088,7 +1106,7 @@ async function loadSelectedServerOnModsTab(){
         }
         return
     }
-    const serv = distro.getServerById(ConfigManager.getSelectedServer())
+    const serv = resolveSelectedServerLike(distro)
     if(!serv || !serv.rawServer){
         for(const el of document.getElementsByClassName('settingsSelServContent')) {
             el.innerHTML = ''
