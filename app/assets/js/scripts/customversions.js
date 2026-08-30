@@ -12,10 +12,7 @@
         const body = await res.json()
         const versions = Array.isArray(body.versions) ? body.versions : []
         return versions
-            // Only 1.x releases for now. MC 26.x moved to a new native-library
-            // layout the launcher's ProcessBuilder doesn't support yet, so it would
-            // crash on launch — exclude it from the picker until that's implemented.
-            .filter(v => v.type === 'release' && /^1\./.test(v.id))
+            .filter(v => v.type === 'release')
             .map(v => ({ id: v.id, releaseTime: v.releaseTime }))
             // Mojang manifest is already newest-first, but sort defensively.
             .sort((a, b) => new Date(b.releaseTime) - new Date(a.releaseTime))
