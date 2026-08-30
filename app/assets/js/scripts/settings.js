@@ -2058,7 +2058,7 @@ async function openModrinthSearch(){
     }
     document.getElementById('modrinthSearchInput').value = ''
     document.getElementById('modrinthResults').innerHTML = ''
-    toggleOverlay(true, 'modrinthContent')
+    toggleOverlay(true, true, 'modrinthContent')
 }
 
 function _mrEsc(s){

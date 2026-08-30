@@ -24,7 +24,8 @@ let overlayHandlerContent
  */
 function overlayKeyHandler (e){
     if(e.key === 'Enter' || e.key === 'Escape'){
-        document.getElementById(overlayHandlerContent).getElementsByClassName('overlayKeybindEnter')[0].click()
+        const el = document.getElementById(overlayHandlerContent).getElementsByClassName('overlayKeybindEnter')[0]
+        if(el) el.click()
     }
 }
 /**
@@ -34,9 +35,11 @@ function overlayKeyHandler (e){
  */
 function overlayKeyDismissableHandler (e){
     if(e.key === 'Enter'){
-        document.getElementById(overlayHandlerContent).getElementsByClassName('overlayKeybindEnter')[0].click()
+        const el = document.getElementById(overlayHandlerContent).getElementsByClassName('overlayKeybindEnter')[0]
+        if(el) el.click()
     } else if(e.key === 'Escape'){
-        document.getElementById(overlayHandlerContent).getElementsByClassName('overlayKeybindEsc')[0].click()
+        const el = document.getElementById(overlayHandlerContent).getElementsByClassName('overlayKeybindEsc')[0]
+        if(el) el.click()
     }
 }
 
