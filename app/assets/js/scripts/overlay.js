@@ -542,13 +542,35 @@ async function openCustomInstanceCreate(){
                     loaderVerEl.innerHTML = list.map(v => `<option value="${v.version}">${v.version}${v.stable ? '' : ' (beta)'}</option>`).join('')
                 }
             } catch(e){ if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">取得失敗</option>' }
+        } else if(loaderEl.value === 'forge'){
+            if(loaderVerField) loaderVerField.style.display = ''
+            const mc = document.getElementById('customCreateMcVersion').value
+            const { mcVersionAtLeast } = require('helios-core/common')
+            if(!mc || !mcVersionAtLeast('1.13', mc)){
+                if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">このバージョンのForgeは今後対応予定です（レガシー）</option>'
+                return
+            }
+            if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">読み込み中...</option>'
+            try {
+                const list = await window.NLCustomVersions.fetchForgeVersions(mc)
+                if(list.length === 0){
+                    if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">このMC版に対応するForgeがありません</option>'
+                } else if(loaderVerEl){
+                    loaderVerEl.innerHTML = list.map(v => {
+                        const tag = v.recommended ? ' (推奨)' : (v.latest ? ' (最新)' : '')
+                        return `<option value="${v.version}">${v.version}${tag}</option>`
+                    }).join('')
+                    const def = list.find(v => v.recommended) || list.find(v => v.latest)
+                    if(def) loaderVerEl.value = def.version
+                }
+            } catch(e){ if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">取得失敗</option>' }
         } else {
             if(loaderVerField) loaderVerField.style.display = 'none'
         }
     }
     if(loaderEl) loaderEl.onchange = refreshLoaderVersions
     const mcEl2 = document.getElementById('customCreateMcVersion')
-    if(mcEl2) mcEl2.onchange = () => { if(loaderEl && loaderEl.value === 'fabric') refreshLoaderVersions() }
+    if(mcEl2) mcEl2.onchange = () => { if(loaderEl && (loaderEl.value === 'fabric' || loaderEl.value === 'forge')) refreshLoaderVersions() }
 }
 
 function _genInstanceId(){
@@ -566,10 +588,10 @@ document.getElementById('customCreateConfirm').addEventListener('click', () => {
         return
     }
     let loaderVersion = ''
-    if(loader === 'fabric'){
+    if(loader === 'fabric' || loader === 'forge'){
         loaderVersion = document.getElementById('customCreateLoaderVersion').value
         if(!loaderVersion){
-            setOverlayContent('未選択', 'Fabricローダーのバージョンを選んでください。', 'OK')
+            setOverlayContent('未選択', 'ローダーのバージョンを選んでください。', 'OK')
             setOverlayHandler(null); toggleOverlay(true); return
         }
     }

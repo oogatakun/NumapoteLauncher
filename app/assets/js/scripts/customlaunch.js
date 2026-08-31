@@ -97,6 +97,17 @@
             const fabricModule = await window.NLCustomFabric.installFabric(profile, commonDir)
             modManifest = profile          // has mainClass + arguments + libraries
             loaderModules = [fabricModule]  // Type.Fabric synthetic module
+        } else if(instance.loader === 'forge'){
+            setLaunchDetails('Forgeを準備中...')
+            const jExe = ConfigManager.getEffectiveJavaExecutable(instance.id)
+            if(jExe == null){ throw new Error('Javaが見つかりません。先にJavaを準備してください。') }
+            const full = `${instance.minecraftVersion}-${instance.loaderVersion}`
+            const { forgeModule, modManifest: fm } = await window.NLCustomForge.installForge(
+                full, instance.minecraftVersion, commonDir, jExe,
+                p => setDownloadPercentage(Math.min(99, p)))
+            modManifest = fm                // Forge version.json (mainClass + arguments + libraries)
+            loaderModules = [forgeModule]   // Type.Forge synthetic module
+            setDownloadPercentage(100)
         }
 
         // 3) Build & launch.
