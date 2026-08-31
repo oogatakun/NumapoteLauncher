@@ -90,8 +90,11 @@
 
     // Collect the mod + its required dependencies (recursive, deduped).
     // A dependency whose file is non-distributable comes back with url:null.
+    // Returns { files, unresolved } where unresolved lists required deps that
+    // have no compatible version (or failed to fetch) so the caller can warn.
     async function collectRequired(version, mc, loader){
         const out = []
+        const unresolved = []
         const seenFiles = new Set()
         const seenVer = new Set()
         async function walk(ver){
@@ -101,12 +104,14 @@
             if(pf && !seenFiles.has(pf.filename)){ seenFiles.add(pf.filename); out.push(pf) }
             for(const dep of (ver.dependencies || [])){
                 if(dep.dependency_type !== 'required') continue
-                const depVer = await getBestVersion(dep.project_id, mc, loader)
+                let depVer = null
+                try { depVer = await getBestVersion(dep.project_id, mc, loader) } catch(e){ depVer = null }
                 if(depVer) await walk(depVer)
+                else unresolved.push(dep.project_id || '?')
             }
         }
         await walk(version)
-        return out
+        return { files: out, unresolved }
     }
 
     window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile }

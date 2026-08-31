@@ -2232,7 +2232,9 @@ function renderOnlineActions(actionsEl, hit, ctx, source){
 async function installOnlineVersion(ctx, hit, version, source){
     const { downloadFile } = require('helios-core/dl')
     const fsx = require('fs-extra'); const pth = require('path')
-    const files = await _mrApi(source).collectRequired(version, ctx.mc, ctx.loader)
+    const resolved = await _mrApi(source).collectRequired(version, ctx.mc, ctx.loader)
+    const files = resolved.files || []
+    const unresolved = resolved.unresolved || []
     fsx.ensureDirSync(ctx.modsDir)
     const blockedNames = []
     for(const f of files){
@@ -2250,7 +2252,7 @@ async function installOnlineVersion(ctx, hit, version, source){
         }
         _mrWriteManifest(ctx, manifest)
     }
-    return { blockedNames }
+    return { blockedNames, unresolved }
 }
 
 // Show a small per-row note beneath the result row (blocked/manual-download info).
@@ -2279,14 +2281,25 @@ async function addOnlineMod(hit, ctx, actionsEl, btn, source){
         }
         const res = await installOnlineVersion(ctx, hit, version, source)
         if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
-        if(res.blockedNames && res.blockedNames.length){
-            _mrOnlineNote(actionsEl, '依存 ' + res.blockedNames.join(', ') + ' は手動DLが必要です')
-        }
+        _mrShowInstallNotes(actionsEl, res)
         renderOnlineActions(actionsEl, hit, ctx, source)
     } catch(err){
         btn.removeAttribute('disabled'); btn.textContent = '再試行'
+        _mrOnlineNote(actionsEl, '追加に失敗しました: ' + ((err && err.message) || '不明なエラー'))
         console.warn('online add failed', err)
     }
+}
+
+// Compose the blocked/unresolved-dependency warnings from an install result.
+function _mrShowInstallNotes(actionsEl, res){
+    const notes = []
+    if(res.blockedNames && res.blockedNames.length){
+        notes.push('依存 ' + res.blockedNames.join(', ') + ' は手動DLが必要です')
+    }
+    if(res.unresolved && res.unresolved.length){
+        notes.push('必須依存 ' + res.unresolved.join(', ') + ' の対応版が見つかりませんでした')
+    }
+    if(notes.length){ _mrOnlineNote(actionsEl, notes.join(' / ')) }
 }
 
 async function removeOnlineMod(hit, ctx, actionsEl, entry, btn, source){
@@ -2315,7 +2328,7 @@ async function updateOnlineMod(hit, ctx, actionsEl, entry, best, btn, source){
     try {
         // Install the new version first, then drop the old file if its name changed.
         const oldFiles = (entry.files || []).slice()
-        await installOnlineVersion(ctx, hit, best, source)
+        const res = await installOnlineVersion(ctx, hit, best, source)
         const newManifest = _mrReadManifest(ctx)
         const nk = _mrKey(source, hit.projectId)
         const newFiles = (newManifest[nk] && newManifest[nk].files) || []
@@ -2326,9 +2339,11 @@ async function updateOnlineMod(hit, ctx, actionsEl, entry, best, btn, source){
             if(onDisk){ await DropinModUtil.deleteDropinMod(ctx.modsDir, onDisk) }
         }
         if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+        _mrShowInstallNotes(actionsEl, res)
         renderOnlineActions(actionsEl, hit, ctx, source)
     } catch(err){
         btn.removeAttribute('disabled'); btn.textContent = '再試行'
+        _mrOnlineNote(actionsEl, '更新に失敗しました: ' + ((err && err.message) || '不明なエラー'))
         console.warn('online update failed', err)
     }
 }

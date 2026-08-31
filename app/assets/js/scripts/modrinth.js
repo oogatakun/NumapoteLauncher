@@ -56,8 +56,11 @@
     }
 
     // Collect the mod + its required dependencies (recursive, deduped).
+    // Returns { files, unresolved } where unresolved lists required deps that
+    // have no compatible version (or failed to fetch) so the caller can warn.
     async function collectRequired(version, mc, loader){
         const out = []
+        const unresolved = []
         const seenFiles = new Set()
         const seenVer = new Set()
         async function walk(ver){
@@ -71,17 +74,20 @@
             for(const dep of (ver.dependencies || [])){
                 if(dep.dependency_type !== 'required') continue
                 let depVer = null
-                if(dep.version_id){
-                    const dv = await getJson(`${API}/version/${encodeURIComponent(dep.version_id)}`)
-                    depVer = { versionId: dv.id, files: dv.files || [], dependencies: dv.dependencies || [] }
-                } else if(dep.project_id){
-                    depVer = await getBestVersion(dep.project_id, mc, loader)
-                }
+                try {
+                    if(dep.version_id){
+                        const dv = await getJson(`${API}/version/${encodeURIComponent(dep.version_id)}`)
+                        depVer = dv ? { versionId: dv.id, files: dv.files || [], dependencies: dv.dependencies || [] } : null
+                    } else if(dep.project_id){
+                        depVer = await getBestVersion(dep.project_id, mc, loader)
+                    }
+                } catch(e){ depVer = null }
                 if(depVer) await walk(depVer)
+                else unresolved.push(dep.project_id || dep.version_id || '?')
             }
         }
         await walk(version)
-        return out
+        return { files: out, unresolved }
     }
 
     window.NLModrinth = { search, getBestVersion, collectRequired }
