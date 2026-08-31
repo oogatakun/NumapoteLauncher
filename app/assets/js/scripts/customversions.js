@@ -35,6 +35,35 @@
         return await res.json()
     }
 
+    const FORGE_MAVEN = 'https://maven.minecraftforge.net/net/minecraftforge/forge'
+
+    // All Forge builds for a given MC version, newest-first, with recommended/latest flags.
+    async function fetchForgeVersions(mc){
+        const metaRes = await fetch(`${FORGE_MAVEN}/maven-metadata.xml`, { cache: 'no-store' })
+        if(!metaRes.ok) throw new Error('Forgeバージョン一覧の取得に失敗しました (' + metaRes.status + ')')
+        const xml = await metaRes.text()
+        const all = []
+        const re = /<version>([^<]+)<\/version>/g
+        let m
+        while((m = re.exec(xml)) !== null){ all.push(m[1]) }
+        // maven-metadata is oldest-first; filter to this MC and reverse to newest-first.
+        const forThisMc = all.filter(v => v.startsWith(mc + '-')).reverse()
+        let rec = null, lat = null
+        try {
+            // Promotions are served from files.minecraftforge.net (not the maven host).
+            const promoRes = await fetch('https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json', { cache: 'no-store' })
+            if(promoRes.ok){
+                const promos = (await promoRes.json()).promos || {}
+                rec = promos[mc + '-recommended'] || null
+                lat = promos[mc + '-latest'] || null
+            }
+        } catch(e){ /* flags are best-effort */ }
+        return forThisMc.map(full => {
+            const version = full.slice(mc.length + 1)
+            return { version, full, recommended: version === rec, latest: version === lat }
+        })
+    }
+
     // The Java major version a given MC release requires, per its Mojang
     // version JSON (javaVersion.majorVersion). Returns null if unavailable.
     async function fetchRequiredJavaMajor(mc){
@@ -52,5 +81,5 @@
         }
     }
 
-    window.NLCustomVersions = { fetchReleaseVersions, fetchFabricLoaderVersions, fetchFabricProfile, fetchRequiredJavaMajor }
+    window.NLCustomVersions = { fetchReleaseVersions, fetchFabricLoaderVersions, fetchFabricProfile, fetchRequiredJavaMajor, fetchForgeVersions }
 })()
