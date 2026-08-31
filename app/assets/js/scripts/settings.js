@@ -2118,7 +2118,12 @@ async function addModrinthMod(hit, btn){
     }
 }
 
-{
+// The Modrinth overlay markup (#modrinthContent) lives in overlay.ejs, which is
+// included AFTER settings.ejs in app.ejs — so these elements don't exist yet when
+// settings.js runs. Bind on DOMContentLoaded, once the whole document (including
+// overlay.ejs) is parsed. #settingsModrinthButton is in settings.ejs so it would
+// bind either way, but keep it here for cohesion.
+document.addEventListener('DOMContentLoaded', () => {
     const mb = document.getElementById('settingsModrinthButton')
     if(mb) mb.onclick = () => openModrinthSearch()
     const sb = document.getElementById('modrinthSearchButton')
@@ -2127,6 +2132,6 @@ async function addModrinthMod(hit, btn){
     if(si) si.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); runModrinthSearch() } })
     const mc = document.getElementById('modrinthCancel')
     if(mc) mc.onclick = () => toggleOverlay(false)
-}
+})
 
 if(settingsRevertCustomCode) settingsRevertCustomCode.onclick = revertCustomCode
