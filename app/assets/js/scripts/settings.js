@@ -2050,20 +2050,49 @@ async function revertCustomCode(){
     }
 }
 
-async function openModrinthSearch(){
+// Reflect the active source in the overlay chrome (toggle, header, key row).
+function _mrSetSource(source){
+    currentModSource = source
+    const bar = document.getElementById('onlineModSourceToggle')
+    if(bar){
+        Array.from(bar.children).forEach(b => {
+            if(b.getAttribute('data-source') === source) b.setAttribute('selected', '')
+            else b.removeAttribute('selected')
+        })
+    }
+    const row = document.getElementById('cfApiKeyRow')
+    if(row) row.style.display = (source === 'curseforge') ? '' : 'none'
+    const header = document.getElementById('modrinthHeader')
+    if(header) header.textContent = (source === 'curseforge') ? 'CurseForgeから追加' : 'Modrinthから追加'
+}
+
+async function openOnlineModSearch(source){
     const ctx = await getModTargetContext()
     if(!ctx || !ctx.loader){
         setOverlayContent('MOD非対応', 'このパックはMODを導入できません（Fabric/Forge のパックを選んでください）。', 'OK')
         setOverlayHandler(null); toggleOverlay(true); return
     }
+    _mrSetSource(source)
     document.getElementById('modrinthSearchInput').value = ''
     document.getElementById('modrinthResults').innerHTML = ''
     toggleOverlay(true, true, 'modrinthContent')
+    if(source === 'curseforge' && !window.NLCurseForge.hasKey()){
+        document.getElementById('modrinthResults').innerHTML = '<div style="opacity:0.7">CurseForge利用不可（APIキー未設定）</div>'
+    }
 }
 
 function _mrEsc(s){
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c]))
 }
+
+// Source selection: swap the API object and namespace the manifest key by source.
+function _mrApi(source){
+    return source === 'curseforge' ? window.NLCurseForge : window.NLModrinth
+}
+function _mrKey(source, projectId){
+    return source === 'curseforge' ? ('cf:' + projectId) : projectId
+}
+let currentModSource = 'modrinth'
 
 // --- Installed-mod manifest (per instance) -------------------------------
 // Records which Modrinth projects were installed into this pack so the search
@@ -2119,30 +2148,34 @@ function _mrHeuristicEntry(ctx, hit){
 // Return the manifest entry only if at least one tracked file is still on disk
 // (as .jar or .jar.disabled); otherwise the mod was removed manually → treat as
 // not installed. Falls back to a slug-based scan and self-heals the manifest.
-function _mrInstalledEntry(ctx, manifest, projectId, hit){
+function _mrInstalledEntry(ctx, manifest, source, hit){
     const fsx = require('fs-extra'); const pth = require('path')
-    const e = manifest[projectId]
+    const key = _mrKey(source, hit.projectId)
+    const e = manifest[key]
     if(e && Array.isArray(e.files) && e.files.length > 0){
         for(const fn of e.files){
             const p = pth.join(ctx.modsDir, fn)
             if(fsx.existsSync(p) || fsx.existsSync(p + '.disabled')) return e
         }
     }
-    if(hit){
-        const h = _mrHeuristicEntry(ctx, hit)
-        if(h){ manifest[projectId] = h; _mrWriteManifest(ctx, manifest); return h }
-    }
+    const h = _mrHeuristicEntry(ctx, hit)
+    if(h){ h.source = source; manifest[key] = h; _mrWriteManifest(ctx, manifest); return h }
     return null
 }
 
-async function runModrinthSearch(){
+async function runOnlineModSearch(){
+    const source = currentModSource
     const ctx = await getModTargetContext()
     if(!ctx || !ctx.loader) return
-    const q = document.getElementById('modrinthSearchInput').value.trim()
     const results = document.getElementById('modrinthResults')
+    if(source === 'curseforge' && !window.NLCurseForge.hasKey()){
+        results.innerHTML = '<div style="opacity:0.7">CurseForge利用不可（APIキー未設定）</div>'
+        return
+    }
+    const q = document.getElementById('modrinthSearchInput').value.trim()
     results.innerHTML = '<div style="opacity:0.7">検索中...</div>'
     try {
-        const hits = await window.NLModrinth.search(q, ctx.mc, ctx.loader)
+        const hits = await _mrApi(source).search(q, ctx.mc, ctx.loader)
         if(hits.length === 0){ results.innerHTML = '<div style="opacity:0.7">見つかりませんでした</div>'; return }
         results.innerHTML = ''
         for(const h of hits){
@@ -2156,7 +2189,7 @@ async function runModrinthSearch(){
                 </div>
                 <div class="modrinthActions"></div>`
             results.appendChild(row)
-            _mrRenderActions(row.getElementsByClassName('modrinthActions')[0], h, ctx)
+            renderOnlineActions(row.getElementsByClassName('modrinthActions')[0], h, ctx, source)
         }
     } catch(err){
         results.innerHTML = '<div style="opacity:0.7">' + (err.message || '検索に失敗しました') + '</div>'
@@ -2165,23 +2198,23 @@ async function runModrinthSearch(){
 
 // Render the add / remove (+ update) buttons for one result row, based on the
 // current installed state. Re-called after any action to refresh the row.
-function _mrRenderActions(actionsEl, hit, ctx){
+function renderOnlineActions(actionsEl, hit, ctx, source){
     const manifest = _mrReadManifest(ctx)
-    const entry = _mrInstalledEntry(ctx, manifest, hit.projectId, hit)
+    const entry = _mrInstalledEntry(ctx, manifest, source, hit)
     actionsEl.innerHTML = ''
     if(!entry){
         const add = document.createElement('button')
         add.type = 'button'; add.className = 'modrinthAddButton'; add.textContent = '追加'
-        add.onclick = () => addModrinthMod(hit, ctx, actionsEl, add)
+        add.onclick = () => addOnlineMod(hit, ctx, actionsEl, add, source)
         actionsEl.appendChild(add)
         return
     }
     const rem = document.createElement('button')
     rem.type = 'button'; rem.className = 'modrinthRemoveButton'; rem.textContent = '削除'
-    rem.onclick = () => removeModrinthMod(hit, ctx, actionsEl, entry, rem)
+    rem.onclick = () => removeOnlineMod(hit, ctx, actionsEl, entry, rem, source)
     actionsEl.appendChild(rem)
     // Check for a newer version asynchronously (network); if found, add 更新.
-    window.NLModrinth.getBestVersion(hit.projectId, ctx.mc, ctx.loader).then(best => {
+    _mrApi(source).getBestVersion(hit.projectId, ctx.mc, ctx.loader).then(best => {
         if(!best) return
         const newer = best.versionId !== entry.versionId
             && new Date(best.datePublished || 0) > new Date(entry.datePublished || 0)
@@ -2190,48 +2223,75 @@ function _mrRenderActions(actionsEl, hit, ctx){
         const upd = document.createElement('button')
         upd.type = 'button'; upd.className = 'modrinthUpdateButton'; upd.textContent = '更新'
         upd.title = (entry.versionNumber || '') + ' → ' + (best.versionNumber || '')
-        upd.onclick = () => updateModrinthMod(hit, ctx, actionsEl, entry, best, upd)
+        upd.onclick = () => updateOnlineMod(hit, ctx, actionsEl, entry, best, upd, source)
         actionsEl.insertBefore(upd, actionsEl.firstChild)
     }).catch(() => { /* update check is best-effort */ })
 }
 
-// Download the given resolved version (mod + required deps) into the mods
-// folder and record the mod's own file in the manifest.
-async function _mrInstallVersion(ctx, hit, version){
+// Download the resolved version (mod + required deps) into the mods folder and
+// record the mod's own file. Files with url:null (non-distributable) are skipped
+// and their names returned so the caller can warn the user.
+async function installOnlineVersion(ctx, hit, version, source){
     const { downloadFile } = require('helios-core/dl')
     const fsx = require('fs-extra'); const pth = require('path')
-    const files = await window.NLModrinth.collectRequired(version, ctx.mc, ctx.loader)
+    const files = await _mrApi(source).collectRequired(version, ctx.mc, ctx.loader)
     fsx.ensureDirSync(ctx.modsDir)
+    const blockedNames = []
     for(const f of files){
+        if(!f.url){ blockedNames.push(f.filename); continue }
         const dest = pth.join(ctx.modsDir, f.filename)
         if(!fsx.existsSync(dest) && !fsx.existsSync(dest + '.disabled')){ await downloadFile(f.url, dest) }
     }
-    // files[0] is the mod itself (collectRequired walks it first); track only it.
-    const own = files.length > 0 ? [files[0].filename] : []
-    const manifest = _mrReadManifest(ctx)
-    manifest[hit.projectId] = {
-        slug: hit.slug, title: hit.title,
-        versionId: version.versionId, versionNumber: version.versionNumber,
-        datePublished: version.datePublished, files: own
+    // files[0] is the mod itself (collectRequired walks it first).
+    if(files.length > 0 && files[0].url){
+        const manifest = _mrReadManifest(ctx)
+        manifest[_mrKey(source, hit.projectId)] = {
+            source, slug: hit.slug, title: hit.title,
+            versionId: version.versionId, versionNumber: version.versionNumber,
+            datePublished: version.datePublished, files: [files[0].filename]
+        }
+        _mrWriteManifest(ctx, manifest)
     }
-    _mrWriteManifest(ctx, manifest)
+    return { blockedNames }
 }
 
-async function addModrinthMod(hit, ctx, actionsEl, btn){
+// Show a small per-row note beneath the result row (blocked/manual-download info).
+function _mrOnlineNote(actionsEl, msg){
+    const row = actionsEl.closest('.modrinthResult')
+    if(!row || !row.parentNode) return
+    let note = row.nextElementSibling
+    if(!note || !note.classList || !note.classList.contains('modrinthNote')){
+        note = document.createElement('div'); note.className = 'modrinthNote'
+        row.parentNode.insertBefore(note, row.nextSibling)
+    }
+    note.textContent = msg
+}
+
+async function addOnlineMod(hit, ctx, actionsEl, btn, source){
     btn.setAttribute('disabled', ''); btn.textContent = '追加中...'
     try {
-        const version = await window.NLModrinth.getBestVersion(hit.projectId, ctx.mc, ctx.loader)
+        const version = await _mrApi(source).getBestVersion(hit.projectId, ctx.mc, ctx.loader)
         if(!version){ btn.textContent = '非対応'; return }
-        await _mrInstallVersion(ctx, hit, version)
+        if(version.blocked){
+            // Author disabled third-party distribution → send the user to the site.
+            btn.removeAttribute('disabled'); btn.className = 'modrinthAddButton'; btn.textContent = 'CurseForgeで開く'
+            btn.onclick = () => { try { shell.openExternal(hit.websiteUrl) } catch(e) { /* ignore */ } }
+            _mrOnlineNote(actionsEl, 'このMODは配布不可設定のため手動DLが必要です')
+            return
+        }
+        const res = await installOnlineVersion(ctx, hit, version, source)
         if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
-        _mrRenderActions(actionsEl, hit, ctx)
+        if(res.blockedNames && res.blockedNames.length){
+            _mrOnlineNote(actionsEl, '依存 ' + res.blockedNames.join(', ') + ' は手動DLが必要です')
+        }
+        renderOnlineActions(actionsEl, hit, ctx, source)
     } catch(err){
         btn.removeAttribute('disabled'); btn.textContent = '再試行'
-        console.warn('Modrinth add failed', err)
+        console.warn('online add failed', err)
     }
 }
 
-async function removeModrinthMod(hit, ctx, actionsEl, entry, btn){
+async function removeOnlineMod(hit, ctx, actionsEl, entry, btn, source){
     const pth = require('path'); const fsx = require('fs-extra')
     btn.setAttribute('disabled', ''); btn.textContent = '削除中...'
     try {
@@ -2241,25 +2301,26 @@ async function removeModrinthMod(hit, ctx, actionsEl, entry, btn){
             if(onDisk){ await DropinModUtil.deleteDropinMod(ctx.modsDir, onDisk) }
         }
         const manifest = _mrReadManifest(ctx)
-        delete manifest[hit.projectId]
+        delete manifest[_mrKey(source, hit.projectId)]
         _mrWriteManifest(ctx, manifest)
         if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
-        _mrRenderActions(actionsEl, hit, ctx)
+        renderOnlineActions(actionsEl, hit, ctx, source)
     } catch(err){
         btn.removeAttribute('disabled'); btn.textContent = '再試行'
-        console.warn('Modrinth remove failed', err)
+        console.warn('online remove failed', err)
     }
 }
 
-async function updateModrinthMod(hit, ctx, actionsEl, entry, best, btn){
+async function updateOnlineMod(hit, ctx, actionsEl, entry, best, btn, source){
     const pth = require('path'); const fsx = require('fs-extra')
     btn.setAttribute('disabled', ''); btn.textContent = '更新中...'
     try {
         // Install the new version first, then drop the old file if its name changed.
         const oldFiles = (entry.files || []).slice()
-        await _mrInstallVersion(ctx, hit, best)
+        await installOnlineVersion(ctx, hit, best, source)
         const newManifest = _mrReadManifest(ctx)
-        const newFiles = (newManifest[hit.projectId] && newManifest[hit.projectId].files) || []
+        const nk = _mrKey(source, hit.projectId)
+        const newFiles = (newManifest[nk] && newManifest[nk].files) || []
         for(const fn of oldFiles){
             if(newFiles.includes(fn)) continue
             const onDisk = fsx.existsSync(pth.join(ctx.modsDir, fn)) ? fn
@@ -2267,10 +2328,10 @@ async function updateModrinthMod(hit, ctx, actionsEl, entry, best, btn){
             if(onDisk){ await DropinModUtil.deleteDropinMod(ctx.modsDir, onDisk) }
         }
         if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
-        _mrRenderActions(actionsEl, hit, ctx)
+        renderOnlineActions(actionsEl, hit, ctx, source)
     } catch(err){
         btn.removeAttribute('disabled'); btn.textContent = '再試行'
-        console.warn('Modrinth update failed', err)
+        console.warn('online update failed', err)
     }
 }
 
@@ -2281,13 +2342,29 @@ async function updateModrinthMod(hit, ctx, actionsEl, entry, best, btn){
 // bind either way, but keep it here for cohesion.
 document.addEventListener('DOMContentLoaded', () => {
     const mb = document.getElementById('settingsModrinthButton')
-    if(mb) mb.onclick = () => openModrinthSearch()
+    if(mb) mb.onclick = () => openOnlineModSearch('modrinth')
+    const cfb = document.getElementById('settingsCurseForgeButton')
+    if(cfb) cfb.onclick = () => openOnlineModSearch('curseforge')
     const sb = document.getElementById('modrinthSearchButton')
-    if(sb) sb.onclick = () => runModrinthSearch()
+    if(sb) sb.onclick = () => runOnlineModSearch()
     const si = document.getElementById('modrinthSearchInput')
-    if(si) si.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); runModrinthSearch() } })
+    if(si) si.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); runOnlineModSearch() } })
     const mc = document.getElementById('modrinthCancel')
     if(mc) mc.onclick = () => toggleOverlay(false)
+    const bar = document.getElementById('onlineModSourceToggle')
+    if(bar){
+        Array.from(bar.children).forEach(b => {
+            b.onclick = () => { _mrSetSource(b.getAttribute('data-source')); runOnlineModSearch() }
+        })
+    }
+    const cfk = document.getElementById('cfApiKeyInput')
+    if(cfk){
+        try { cfk.value = ConfigManager.getCurseForgeApiKey() } catch(e) { /* ignore */ }
+        cfk.onchange = () => {
+            try { ConfigManager.setCurseForgeApiKey(cfk.value.trim()); ConfigManager.save() } catch(e) { /* ignore */ }
+            runOnlineModSearch()
+        }
+    }
 })
 
 if(settingsRevertCustomCode) settingsRevertCustomCode.onclick = revertCustomCode
