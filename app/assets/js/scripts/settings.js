@@ -2074,11 +2074,9 @@ async function openOnlineModSearch(source){
     }
     _mrSetSource(source)
     document.getElementById('modrinthSearchInput').value = ''
-    document.getElementById('modrinthResults').innerHTML = ''
     toggleOverlay(true, true, 'modrinthContent')
-    if(source === 'curseforge' && !window.NLCurseForge.hasKey()){
-        document.getElementById('modrinthResults').innerHTML = '<div style="opacity:0.7">CurseForge利用不可（APIキー未設定）</div>'
-    }
+    // Populate recommended (popular) mods immediately, without needing a re-select.
+    runOnlineModSearch()
 }
 
 function _mrEsc(s){
@@ -2335,16 +2333,14 @@ async function updateOnlineMod(hit, ctx, actionsEl, entry, best, btn, source){
     }
 }
 
-// The Modrinth overlay markup (#modrinthContent) lives in overlay.ejs, which is
+// The online-mod overlay markup (#modrinthContent) lives in overlay.ejs, which is
 // included AFTER settings.ejs in app.ejs — so these elements don't exist yet when
 // settings.js runs. Bind on DOMContentLoaded, once the whole document (including
-// overlay.ejs) is parsed. #settingsModrinthButton is in settings.ejs so it would
+// overlay.ejs) is parsed. #settingsAddOnlineModButton is in settings.ejs so it would
 // bind either way, but keep it here for cohesion.
 document.addEventListener('DOMContentLoaded', () => {
-    const mb = document.getElementById('settingsModrinthButton')
+    const mb = document.getElementById('settingsAddOnlineModButton')
     if(mb) mb.onclick = () => openOnlineModSearch('modrinth')
-    const cfb = document.getElementById('settingsCurseForgeButton')
-    if(cfb) cfb.onclick = () => openOnlineModSearch('curseforge')
     const sb = document.getElementById('modrinthSearchButton')
     if(sb) sb.onclick = () => runOnlineModSearch()
     const si = document.getElementById('modrinthSearchInput')
