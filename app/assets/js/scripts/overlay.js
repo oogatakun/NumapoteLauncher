@@ -545,11 +545,7 @@ async function openCustomInstanceCreate(){
         } else if(loaderEl.value === 'forge'){
             if(loaderVerField) loaderVerField.style.display = ''
             const mc = document.getElementById('customCreateMcVersion').value
-            const { mcVersionAtLeast } = require('helios-core/common')
-            if(!mc || !mcVersionAtLeast('1.13', mc)){
-                if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">このバージョンのForgeは今後対応予定です（レガシー）</option>'
-                return
-            }
+            if(!mc){ if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">先にMinecraftバージョンを選択</option>'; return }
             if(loaderVerEl) loaderVerEl.innerHTML = '<option value="">読み込み中...</option>'
             try {
                 const list = await window.NLCustomVersions.fetchForgeVersions(mc)
