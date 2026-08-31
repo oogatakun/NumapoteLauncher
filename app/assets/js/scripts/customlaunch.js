@@ -99,14 +99,25 @@
             loaderModules = [fabricModule]  // Type.Fabric synthetic module
         } else if(instance.loader === 'forge'){
             setLaunchDetails('Forgeを準備中...')
-            const jExe = ConfigManager.getEffectiveJavaExecutable(instance.id)
-            if(jExe == null){ throw new Error('Javaが見つかりません。先にJavaを準備してください。') }
             const full = `${instance.minecraftVersion}-${instance.loaderVersion}`
-            const { forgeModule, modManifest: fm } = await window.NLCustomForge.installForge(
-                full, instance.minecraftVersion, commonDir, jExe,
-                p => setDownloadPercentage(Math.min(99, p)))
-            modManifest = fm                // Forge version.json (mainClass + arguments + libraries)
-            loaderModules = [forgeModule]   // Type.Forge synthetic module
+            const { DistributionIndexProcessor } = require('helios-core/dl')
+            if(DistributionIndexProcessor.isForgeGradle3(instance.minecraftVersion, full)){
+                const jExe = ConfigManager.getEffectiveJavaExecutable(instance.id)
+                if(jExe == null){ throw new Error('Javaが見つかりません。先にJavaを準備してください。') }
+                const { forgeModule, modManifest: fm } = await window.NLCustomForge.installForge(
+                    full, instance.minecraftVersion, commonDir, jExe,
+                    p => setDownloadPercentage(Math.min(99, p)))
+                modManifest = fm                // Forge version.json (FG3)
+                loaderModules = [forgeModule]   // Type.Forge synthetic module
+            } else {
+                const { forgeModule, modManifest: fm, unresolved } = await window.NLCustomForgeLegacy.installLegacyForge(
+                    full, instance.minecraftVersion, commonDir)
+                modManifest = fm                // legacy versionInfo (minecraftArguments)
+                loaderModules = [forgeModule]   // Type.ForgeHosted synthetic module
+                if(unresolved && unresolved.length){
+                    setLaunchDetails('一部ライブラリを取得できませんでした: ' + unresolved.join(', '))
+                }
+            }
             setDownloadPercentage(100)
         }
 
