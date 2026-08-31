@@ -37,8 +37,16 @@
         const ld = encodeURIComponent(JSON.stringify([loader]))
         const list = await getJson(`${API}/project/${encodeURIComponent(projectId)}/version?game_versions=${gv}&loaders=${ld}`)
         if(!Array.isArray(list) || list.length === 0) return null
-        const v = list[0] // newest compatible
-        return { versionId: v.id, files: v.files || [], dependencies: v.dependencies || [] }
+        // The API does not guarantee ordering; pick the newest by publish date.
+        const sorted = list.slice().sort((a, b) => new Date(b.date_published || 0) - new Date(a.date_published || 0))
+        const v = sorted[0]
+        return {
+            versionId: v.id,
+            versionNumber: v.version_number,
+            datePublished: v.date_published,
+            files: v.files || [],
+            dependencies: v.dependencies || []
+        }
     }
 
     function primaryFile(files){

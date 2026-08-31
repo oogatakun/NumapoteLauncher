@@ -2065,6 +2065,76 @@ function _mrEsc(s){
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[c]))
 }
 
+// --- Installed-mod manifest (per instance) -------------------------------
+// Records which Modrinth projects were installed into this pack so the search
+// UI can offer 削除/更新 instead of 追加. Stored next to the mods folder as
+// instances/<id>/.numapote-mods.json, keyed by projectId. Only the mod's own
+// file is tracked (not its dependencies) so removal never breaks other mods.
+
+function _mrManifestPath(ctx){
+    const pth = require('path')
+    return pth.join(pth.dirname(ctx.modsDir), '.numapote-mods.json')
+}
+function _mrReadManifest(ctx){
+    const fsx = require('fs-extra')
+    try {
+        const p = _mrManifestPath(ctx)
+        if(fsx.existsSync(p)) return JSON.parse(fsx.readFileSync(p, 'utf-8')) || {}
+    } catch(e){ /* corrupt/missing → empty */ }
+    return {}
+}
+function _mrWriteManifest(ctx, obj){
+    const fsx = require('fs-extra')
+    try {
+        fsx.ensureDirSync(require('path').dirname(_mrManifestPath(ctx)))
+        fsx.writeFileSync(_mrManifestPath(ctx), JSON.stringify(obj, null, 2))
+    } catch(e){ console.warn('Modrinth manifest write failed', e) }
+}
+// List mod files currently in the mods folder (base name, .disabled stripped).
+function _mrScanModFiles(ctx){
+    const fsx = require('fs-extra')
+    try {
+        if(!fsx.existsSync(ctx.modsDir)) return []
+        return fsx.readdirSync(ctx.modsDir)
+            .filter(n => /\.(jar|zip|litemod)(\.disabled)?$/i.test(n))
+            .map(n => n.replace(/\.disabled$/i, ''))
+    } catch(e){ return [] }
+}
+// Fallback for mods installed before manifest tracking (or dropped in manually):
+// match on-disk files whose name starts with the project slug at a boundary.
+// versionId is unknown, so an update check will always offer 更新 (reinstall latest).
+function _mrHeuristicEntry(ctx, hit){
+    const slug = String(hit.slug || '').toLowerCase()
+    if(!slug) return null
+    const matches = []
+    for(const base of _mrScanModFiles(ctx)){
+        const b = base.toLowerCase()
+        if(b === slug + '.jar' || b.startsWith(slug + '-') || b.startsWith(slug + '_') || b.startsWith(slug + '+')){
+            matches.push(base)
+        }
+    }
+    if(matches.length === 0) return null
+    return { slug: hit.slug, title: hit.title, versionId: null, versionNumber: null, datePublished: null, files: matches }
+}
+// Return the manifest entry only if at least one tracked file is still on disk
+// (as .jar or .jar.disabled); otherwise the mod was removed manually → treat as
+// not installed. Falls back to a slug-based scan and self-heals the manifest.
+function _mrInstalledEntry(ctx, manifest, projectId, hit){
+    const fsx = require('fs-extra'); const pth = require('path')
+    const e = manifest[projectId]
+    if(e && Array.isArray(e.files) && e.files.length > 0){
+        for(const fn of e.files){
+            const p = pth.join(ctx.modsDir, fn)
+            if(fsx.existsSync(p) || fsx.existsSync(p + '.disabled')) return e
+        }
+    }
+    if(hit){
+        const h = _mrHeuristicEntry(ctx, hit)
+        if(h){ manifest[projectId] = h; _mrWriteManifest(ctx, manifest); return h }
+    }
+    return null
+}
+
 async function runModrinthSearch(){
     const ctx = await getModTargetContext()
     if(!ctx || !ctx.loader) return
@@ -2084,37 +2154,123 @@ async function runModrinthSearch(){
                     <div class="modrinthResultTitle">${_mrEsc(h.title)}</div>
                     <div class="modrinthResultMeta">${_mrEsc(h.author)} ・ DL ${Number(h.downloads||0).toLocaleString()}</div>
                 </div>
-                <button class="modrinthAddButton" type="button">追加</button>`
-            const btn = row.getElementsByClassName('modrinthAddButton')[0]
-            btn.onclick = () => addModrinthMod(h, btn)
+                <div class="modrinthActions"></div>`
             results.appendChild(row)
+            _mrRenderActions(row.getElementsByClassName('modrinthActions')[0], h, ctx)
         }
     } catch(err){
         results.innerHTML = '<div style="opacity:0.7">' + (err.message || '検索に失敗しました') + '</div>'
     }
 }
 
-async function addModrinthMod(hit, btn){
+// Render the add / remove (+ update) buttons for one result row, based on the
+// current installed state. Re-called after any action to refresh the row.
+function _mrRenderActions(actionsEl, hit, ctx){
+    const manifest = _mrReadManifest(ctx)
+    const entry = _mrInstalledEntry(ctx, manifest, hit.projectId, hit)
+    actionsEl.innerHTML = ''
+    if(!entry){
+        const add = document.createElement('button')
+        add.type = 'button'; add.className = 'modrinthAddButton'; add.textContent = '追加'
+        add.onclick = () => addModrinthMod(hit, ctx, actionsEl, add)
+        actionsEl.appendChild(add)
+        return
+    }
+    const rem = document.createElement('button')
+    rem.type = 'button'; rem.className = 'modrinthRemoveButton'; rem.textContent = '削除'
+    rem.onclick = () => removeModrinthMod(hit, ctx, actionsEl, entry, rem)
+    actionsEl.appendChild(rem)
+    // Check for a newer version asynchronously (network); if found, add 更新.
+    window.NLModrinth.getBestVersion(hit.projectId, ctx.mc, ctx.loader).then(best => {
+        if(!best) return
+        const newer = best.versionId !== entry.versionId
+            && new Date(best.datePublished || 0) > new Date(entry.datePublished || 0)
+        if(!newer) return
+        if(!actionsEl.isConnected) return
+        const upd = document.createElement('button')
+        upd.type = 'button'; upd.className = 'modrinthUpdateButton'; upd.textContent = '更新'
+        upd.title = (entry.versionNumber || '') + ' → ' + (best.versionNumber || '')
+        upd.onclick = () => updateModrinthMod(hit, ctx, actionsEl, entry, best, upd)
+        actionsEl.insertBefore(upd, actionsEl.firstChild)
+    }).catch(() => { /* update check is best-effort */ })
+}
+
+// Download the given resolved version (mod + required deps) into the mods
+// folder and record the mod's own file in the manifest.
+async function _mrInstallVersion(ctx, hit, version){
     const { downloadFile } = require('helios-core/dl')
     const fsx = require('fs-extra'); const pth = require('path')
-    const ctx = await getModTargetContext()
-    if(!ctx || !ctx.loader) return
+    const files = await window.NLModrinth.collectRequired(version, ctx.mc, ctx.loader)
+    fsx.ensureDirSync(ctx.modsDir)
+    for(const f of files){
+        const dest = pth.join(ctx.modsDir, f.filename)
+        if(!fsx.existsSync(dest) && !fsx.existsSync(dest + '.disabled')){ await downloadFile(f.url, dest) }
+    }
+    // files[0] is the mod itself (collectRequired walks it first); track only it.
+    const own = files.length > 0 ? [files[0].filename] : []
+    const manifest = _mrReadManifest(ctx)
+    manifest[hit.projectId] = {
+        slug: hit.slug, title: hit.title,
+        versionId: version.versionId, versionNumber: version.versionNumber,
+        datePublished: version.datePublished, files: own
+    }
+    _mrWriteManifest(ctx, manifest)
+}
+
+async function addModrinthMod(hit, ctx, actionsEl, btn){
     btn.setAttribute('disabled', ''); btn.textContent = '追加中...'
     try {
         const version = await window.NLModrinth.getBestVersion(hit.projectId, ctx.mc, ctx.loader)
         if(!version){ btn.textContent = '非対応'; return }
-        const files = await window.NLModrinth.collectRequired(version, ctx.mc, ctx.loader)
-        fsx.ensureDirSync(ctx.modsDir)
-        let added = 0
-        for(const f of files){
-            const dest = pth.join(ctx.modsDir, f.filename)
-            if(!fsx.existsSync(dest)){ await downloadFile(f.url, dest); added++ }
-        }
-        btn.textContent = added > 0 ? '追加済み' : '既にあり'
+        await _mrInstallVersion(ctx, hit, version)
         if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+        _mrRenderActions(actionsEl, hit, ctx)
     } catch(err){
         btn.removeAttribute('disabled'); btn.textContent = '再試行'
         console.warn('Modrinth add failed', err)
+    }
+}
+
+async function removeModrinthMod(hit, ctx, actionsEl, entry, btn){
+    const pth = require('path'); const fsx = require('fs-extra')
+    btn.setAttribute('disabled', ''); btn.textContent = '削除中...'
+    try {
+        for(const fn of (entry.files || [])){
+            const onDisk = fsx.existsSync(pth.join(ctx.modsDir, fn)) ? fn
+                : (fsx.existsSync(pth.join(ctx.modsDir, fn + '.disabled')) ? fn + '.disabled' : null)
+            if(onDisk){ await DropinModUtil.deleteDropinMod(ctx.modsDir, onDisk) }
+        }
+        const manifest = _mrReadManifest(ctx)
+        delete manifest[hit.projectId]
+        _mrWriteManifest(ctx, manifest)
+        if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+        _mrRenderActions(actionsEl, hit, ctx)
+    } catch(err){
+        btn.removeAttribute('disabled'); btn.textContent = '再試行'
+        console.warn('Modrinth remove failed', err)
+    }
+}
+
+async function updateModrinthMod(hit, ctx, actionsEl, entry, best, btn){
+    const pth = require('path'); const fsx = require('fs-extra')
+    btn.setAttribute('disabled', ''); btn.textContent = '更新中...'
+    try {
+        // Install the new version first, then drop the old file if its name changed.
+        const oldFiles = (entry.files || []).slice()
+        await _mrInstallVersion(ctx, hit, best)
+        const newManifest = _mrReadManifest(ctx)
+        const newFiles = (newManifest[hit.projectId] && newManifest[hit.projectId].files) || []
+        for(const fn of oldFiles){
+            if(newFiles.includes(fn)) continue
+            const onDisk = fsx.existsSync(pth.join(ctx.modsDir, fn)) ? fn
+                : (fsx.existsSync(pth.join(ctx.modsDir, fn + '.disabled')) ? fn + '.disabled' : null)
+            if(onDisk){ await DropinModUtil.deleteDropinMod(ctx.modsDir, onDisk) }
+        }
+        if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+        _mrRenderActions(actionsEl, hit, ctx)
+    } catch(err){
+        btn.removeAttribute('disabled'); btn.textContent = '再試行'
+        console.warn('Modrinth update failed', err)
     }
 }
 
