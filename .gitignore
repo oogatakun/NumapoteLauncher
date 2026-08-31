@@ -1,0 +1,10 @@
+/node_modules/
+/helios-core/
+/.vs/
+/.vscode/
+/target/
+/logs/
+/dist/
+
+# CurseForge API key (bundled at build time, never committed)
+app/assets/js/cfapikey.js

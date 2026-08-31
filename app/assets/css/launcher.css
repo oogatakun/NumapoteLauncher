@@ -1865,7 +1865,7 @@ input:checked + .toggleSwitchSlider:before {
 
 /* Button to open the mods folder for drop-in mods. */
 #settingsDropinFileSystemButton,
-#settingsModrinthButton {
+#settingsAddOnlineModButton {
     background: rgba(0, 0, 0, 0.25);
     border: 1px solid rgba(126, 126, 126, 0.57);
     border-radius: 3px;
@@ -1884,8 +1884,8 @@ input:checked + .toggleSwitchSlider:before {
 #settingsDropinFileSystemButton:hover,
 #settingsDropinFileSystemButton:focus,
 #settingsDropinFileSystemButton[drag],
-#settingsModrinthButton:hover,
-#settingsModrinthButton:focus {
+#settingsAddOnlineModButton:hover,
+#settingsAddOnlineModButton:focus {
     background: rgba(54, 54, 54, 0.25);
     text-shadow: 0px 0px 20px white;
 }
@@ -4758,6 +4758,10 @@ form[name='submitSecretQuestion'] p {
 #modrinthSearchButton:hover, #modrinthCancel:hover { box-shadow: 0 0 10px 0 #fff; }
 #modrinthResults { width: 100%; flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 #modrinthActions { margin-top: 12px; }
+#onlineModSourceToggle { display: flex; gap: 6px; margin-bottom: 12px; }
+#cfApiKeyRow { margin-bottom: 12px; }
+#cfApiKeyInput { width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.85); border: 2px solid rgba(255,255,255,0.75); border-radius: 3px; padding: 6px; }
+.modrinthNote { font-size: 11px; color: #e6b566; padding: 2px 8px 6px; }
 .modrinthResult { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; border: 1px solid rgba(126,126,126,0.57); border-radius: 3px; padding: 8px; background: rgba(0,0,0,0.25); }
 .modrinthResult img { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 4px; background: rgba(255,255,255,0.1); object-fit: cover; }
 .modrinthResultInfo { flex: 1 1 auto; min-width: 0; }

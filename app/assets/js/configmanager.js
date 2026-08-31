@@ -191,6 +191,7 @@ const DEFAULT_CONFIG = {
     authenticationDatabase: {},
     modConfigurations: [],
     customInstances: [],
+    curseForgeApiKey: '',
     javaConfig: {},
     skinOrder: []
 }
@@ -394,6 +395,20 @@ exports.getSelectedServer = function(def = false){
  */
 exports.setSelectedServer = function(serverID){
     config.selectedServer = serverID
+}
+
+/**
+ * @returns {string} The user-supplied CurseForge API key ('' if unset).
+ */
+exports.getCurseForgeApiKey = function(){
+    return config.curseForgeApiKey || ''
+}
+
+/**
+ * @param {string} key The CurseForge API key to store.
+ */
+exports.setCurseForgeApiKey = function(key){
+    config.curseForgeApiKey = key || ''
 }
 
 /**
