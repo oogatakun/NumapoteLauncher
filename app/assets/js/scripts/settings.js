@@ -65,6 +65,11 @@ function settingsNavItemListener(ele, fade = true){
     let prevTab = selectedSettingsTab
     selectedSettingsTab = ele.getAttribute('rSc')
 
+    // Refresh the Mod tab against the currently selected instance whenever it is shown.
+    if(selectedSettingsTab === 'settingsTabMods'){
+        try { reloadDropinMods() } catch(e){ /* ignore */ }
+    }
+
     document.getElementById(prevTab).onscroll = null
     document.getElementById(selectedSettingsTab).onscroll = settingsTabScrollListener
 
