@@ -4746,6 +4746,11 @@ form[name='submitSecretQuestion'] p {
     align-items: center;
     height: 75%;
 }
+/* Give the server/custom-instance overlay more vertical room so more launch
+   configs are visible before the list scrolls. */
+#serverSelectContent {
+    height: 92%;
+}
 
 /* Modrinth search overlay content. */
 #modrinthContent {
@@ -4802,14 +4807,17 @@ form[name='submitSecretQuestion'] p {
     flex-direction: column;
     align-items: center;
     min-height: 0;
-    max-height: 100%;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
 }
 #customInstanceListScrollable {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     align-content: start;
     gap: 10px;
-    max-height: 48vh;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     width: 640px;
     max-width: 90%;
@@ -4817,7 +4825,7 @@ form[name='submitSecretQuestion'] p {
 #customFilterInput {
     width: 640px;
     max-width: 90%;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
     background-color: rgba(255, 255, 255, 0.75);
     padding: 6px;
     border-radius: 3px;
@@ -4830,7 +4838,7 @@ form[name='submitSecretQuestion'] p {
     gap: 8px;
     justify-content: center;
     flex-wrap: wrap;
-    margin-top: 12px;
+    margin-top: 8px;
 }
 #customInstanceCreateButton {
     background: none;
@@ -4904,11 +4912,11 @@ form[name='submitSecretQuestion'] p {
     flex-direction: column;
     align-items: stretch;
     box-sizing: border-box;
-    gap: 5px;
+    gap: 4px;
     color: #fff;
     border: 1px solid rgba(126, 126, 126, 0.57);
     border-radius: 4px;
-    padding: 7px 10px;
+    padding: 5px 10px;
     background: rgba(0, 0, 0, 0.25);
     cursor: pointer;
     opacity: 0.7;
@@ -4922,15 +4930,24 @@ form[name='submitSecretQuestion'] p {
 .customFavorite { flex: 0 0 auto; background: none; border: none; color: rgba(255,255,255,0.5); font-size: 15px; line-height: 1; padding: 0 2px; cursor: pointer; }
 .customFavorite:hover { color: #f5c518; }
 .customFavorite.on { color: #f5c518; }
+.customInstanceListing { position: relative; }
 .customInstanceListing.dragging { opacity: 0.45; }
-.customInstanceListing.dragover { border-color: #7ad67a; box-shadow: 0 0 0 1px #7ad67a inset; }
+/* Insertion indicator: a vertical line in the gap before/after the target cell. */
+.customInstanceListing.insert-before::after,
+.customInstanceListing.insert-after::after {
+    content: ''; position: absolute; top: 0; bottom: 0; width: 3px;
+    background: #7ad67a; border-radius: 2px; box-shadow: 0 0 6px 0 #7ad67a;
+    pointer-events: none;
+}
+.customInstanceListing.insert-before::after { left: -6px; }
+.customInstanceListing.insert-after::after { right: -6px; }
 .customInstanceListing { -webkit-user-select: none; user-select: none; }
 .customInstanceName { font-weight: bold; font-size: 13px; line-height: 20px; height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .customInstanceMeta { font-size: 11px; color: rgba(202,202,202,0.8); margin-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.customInstanceActions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 5px; }
+.customInstanceActions { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: nowrap; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px; }
 .customInstanceActions button {
     background: none; border: 1px solid rgba(126,126,126,0.57); color: rgba(255,255,255,0.85);
-    border-radius: 3px; padding: 3px 10px; cursor: pointer; font-size: 11px; transition: 0.15s ease;
+    border-radius: 3px; padding: 2px 7px; cursor: pointer; font-size: 11px; white-space: nowrap; transition: 0.15s ease;
 }
 .customInstanceActions button:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.08); }
 .customDelete:hover { border-color: #d67a7a !important; color: #d67a7a !important; }
@@ -4967,6 +4984,8 @@ form[name='submitSecretQuestion'] p {
     color: #fff;
     margin-bottom: 25px;
 }
+/* Tighter header on the server/custom overlay to leave more room for the list. */
+#serverSelectHeader { margin-bottom: 12px; }
 
 /* Wrapper div for the list of available servers. */
 #serverSelectList,
@@ -4975,8 +4994,9 @@ form[name='submitSecretQuestion'] p {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    max-height: 78%;
-    min-height: 40%;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 82%;
 }
 
 /* Scrollable div which lists the available servers. */
