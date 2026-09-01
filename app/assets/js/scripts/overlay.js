@@ -387,22 +387,64 @@ function setServerTab(tab){
 }
 
 let _dragCid = null
+// Find the nearest custom-instance card to a point and whether to drop after it
+// (right of its horizontal center). Lets the user drop anywhere in the list
+// instead of having to land precisely on a target cell's right half.
+function _dropTarget(x, y){
+    const cells = Array.from(document.querySelectorAll('#customInstanceListScrollable .customInstanceListing'))
+    let best = null, bestD = Infinity
+    for(const c of cells){
+        const r = c.getBoundingClientRect()
+        const cx = r.left + r.width / 2, cy = r.top + r.height / 2
+        const d = (x - cx) * (x - cx) + (y - cy) * (y - cy)
+        if(d < bestD){ bestD = d; best = { cid: c.getAttribute('cid'), cx } }
+    }
+    if(!best) return null
+    return { cid: best.cid, after: x > best.cx }
+}
 function populateCustomInstanceListings(){
     const el = document.getElementById('customInstanceListScrollable')
     if(!el) return
-    // Allow wheel scrolling while dragging (native drag suppresses normal scroll).
+    // Container-level drag handling (bound once; el persists across re-renders).
     if(!el._dragWheelBound){
         el._dragWheelBound = true
+        // Allow wheel scrolling while dragging (native drag suppresses normal scroll).
         el.addEventListener('wheel', (e) => {
             if(_dragCid){ el.scrollTop += e.deltaY; e.preventDefault() }
         }, { passive: false })
-        // Edge auto-scroll while dragging near the top/bottom of the list.
+        const clearIndicators = () => Array.from(el.getElementsByClassName('customInstanceListing')).forEach(r => r.classList.remove('insert-before', 'insert-after'))
         el.addEventListener('dragover', (e) => {
             if(!_dragCid) return
+            e.preventDefault()
+            try { e.dataTransfer.dropEffect = 'move' } catch(err){ /* ignore */ }
+            // Edge auto-scroll while dragging near the top/bottom of the list.
             const rect = el.getBoundingClientRect()
             const margin = 40
             if(e.clientY < rect.top + margin) el.scrollTop -= 14
             else if(e.clientY > rect.bottom - margin) el.scrollTop += 14
+            // Insertion indicator on the nearest card (drop anywhere in the list).
+            const t = _dropTarget(e.clientX, e.clientY)
+            clearIndicators()
+            if(t && t.cid !== _dragCid){
+                const row = el.querySelector(`.customInstanceListing[cid="${t.cid}"]`)
+                if(row) row.classList.add(t.after ? 'insert-after' : 'insert-before')
+            }
+        })
+        el.addEventListener('drop', (e) => {
+            e.preventDefault()
+            if(!_dragCid) return
+            const t = _dropTarget(e.clientX, e.clientY)
+            clearIndicators()
+            if(t && t.cid !== _dragCid){
+                ConfigManager.moveCustomInstance(_dragCid, t.cid, t.after)
+                ConfigManager.save()
+                _dragCid = null
+                // Defer re-render so the current drag finishes on intact DOM.
+                setTimeout(() => populateCustomInstanceListings(), 0)
+            }
+        })
+        el.addEventListener('dragleave', (e) => {
+            if(!el.contains(e.relatedTarget)) clearIndicators()
         })
     }
     const selected = ConfigManager.getSelectedServer()
@@ -534,7 +576,8 @@ function setCustomInstanceHandlers(){
             populateCustomInstanceListings()
         }
     })
-    // Drag-and-drop reorder
+    // Drag-and-drop reorder (dragover/drop handled at the container level so the
+    // user can drop anywhere in the list, not just precisely on a target cell).
     Array.from(document.getElementsByClassName('customInstanceListing')).forEach(row => {
         row.addEventListener('dragstart', (e) => {
             _dragCid = row.getAttribute('cid')
@@ -544,39 +587,6 @@ function setCustomInstanceHandlers(){
         row.addEventListener('dragend', () => {
             Array.from(document.getElementsByClassName('customInstanceListing')).forEach(r => r.classList.remove('dragging', 'insert-before', 'insert-after'))
             _dragCid = null
-        })
-        row.addEventListener('dragover', (e) => {
-            if(!_dragCid) return
-            e.preventDefault()
-            try { e.dataTransfer.dropEffect = 'move' } catch(err){ /* ignore */ }
-            Array.from(document.getElementsByClassName('customInstanceListing')).forEach(r => r.classList.remove('insert-before', 'insert-after'))
-            if(row.getAttribute('cid') !== _dragCid){
-                // Show an insertion line on the side the item would land (left half =
-                // before this cell, right half = after it).
-                const rect = row.getBoundingClientRect()
-                const after = (e.clientX - rect.left) > rect.width / 2
-                row.classList.add(after ? 'insert-after' : 'insert-before')
-            }
-        })
-        row.addEventListener('dragleave', () => row.classList.remove('insert-before', 'insert-after'))
-        row.addEventListener('drop', (e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            const targetCid = row.getAttribute('cid')
-            if(_dragCid && targetCid && _dragCid !== targetCid){
-                // Drop on the right half of the target = insert after it (lets a
-                // left-column item move into the right column, and vice versa).
-                const rect = row.getBoundingClientRect()
-                const after = (e.clientX - rect.left) > rect.width / 2
-                ConfigManager.moveCustomInstance(_dragCid, targetCid, after)
-                ConfigManager.save()
-                _dragCid = null
-                // Defer the re-render: mutating the DOM (replacing the dragged row)
-                // synchronously inside the drop event leaves the drag machinery in a
-                // broken state, so subsequent drags stop working. Let this drag finish
-                // first, then rebuild the list.
-                setTimeout(() => populateCustomInstanceListings(), 0)
-            }
         })
     })
     // Change modpack version (modpack-derived instances only)
