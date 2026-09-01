@@ -309,6 +309,16 @@ ipcMain.on('distributionIndexDone', (event, res) => {
                             name: manual.manual.name,
                             state,
                         })
+                        // ダウンロードが正常完了したらウィンドウを閉じる
+                        if (state === 'completed') {
+                            setTimeout(() => {
+                                const w = manualWindows[index]
+                                if (w !== undefined && w.win !== undefined && !w.win.isDestroyed()) {
+                                    w.win.close()
+                                    manualWindows[index] = undefined
+                                }
+                            }, 600)
+                        }
                     }
                 })
             })
