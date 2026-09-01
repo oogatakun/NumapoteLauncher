@@ -34,6 +34,52 @@
         return res.body
     }
 
+    async function postJson(pathAndQuery, body){
+        const key = apiKey()
+        if(!key) throw new Error('CurseForge APIキーが未設定です')
+        let res
+        try {
+            res = await got(API + pathAndQuery, { method: 'POST', headers: { 'x-api-key': key, 'accept': 'application/json' }, json: body, responseType: 'json', throwHttpErrors: false, retry: 0 })
+        } catch(err) {
+            throw new Error('CurseForgeへの接続に失敗しました: ' + (err.message || ''))
+        }
+        if(res.statusCode === 403) throw new Error('CurseForge APIキーが無効です')
+        if(res.statusCode === 429) throw new Error('CurseForgeのレート制限です。少し待って再試行してください。')
+        if(res.statusCode < 200 || res.statusCode >= 300) throw new Error('CurseForgeリクエストに失敗しました (' + res.statusCode + ')')
+        return res.body
+    }
+
+    // --- Modpacks (classId 4471) ---
+    async function searchModpacks(query, limit = 20){
+        const qs = `?gameId=${GAME_ID}&classId=4471&searchFilter=${encodeURIComponent(query || '')}&sortField=2&sortOrder=desc&pageSize=${limit}`
+        const body = await getJson('/mods/search' + qs)
+        return (body.data || []).map(_mapHit)
+    }
+
+    async function getModpackVersions(projectId){
+        const body = await getJson('/mods/' + encodeURIComponent(projectId) + '/files?pageSize=50')
+        const list = body.data || []
+        const out = list.map(f => ({
+            versionId: String(f.id),
+            versionNumber: f.displayName || f.fileName,
+            gameVersions: (f.gameVersions || []).filter(v => /^\d/.test(v)),
+            loaders: (f.gameVersions || []).filter(v => !/^\d/.test(v)),
+            datePublished: f.fileDate,
+            file: { url: f.downloadUrl || null, filename: f.fileName, versionId: String(f.id) }
+        }))
+        out.sort((a, b) => new Date(b.datePublished || 0) - new Date(a.datePublished || 0))
+        return out
+    }
+
+    // Resolve CurseForge fileIds to { [fileId]: {fileName, downloadUrl} } in one call.
+    async function resolveFiles(fileIds){
+        if(!fileIds || fileIds.length === 0) return {}
+        const body = await postJson('/mods/files', { fileIds: fileIds.map(Number) })
+        const map = {}
+        for(const f of (body.data || [])){ map[String(f.id)] = { fileName: f.fileName, downloadUrl: f.downloadUrl || null, modId: f.modId } }
+        return map
+    }
+
     // --- Pure mappers (no network) ---
     function _mapHit(m){
         return {
@@ -114,5 +160,5 @@
         return { files: out, unresolved }
     }
 
-    window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile }
+    window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile, searchModpacks, getModpackVersions, resolveFiles, postJson }
 })()

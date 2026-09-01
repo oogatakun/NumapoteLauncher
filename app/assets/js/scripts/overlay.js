@@ -908,8 +908,16 @@ document.getElementById('windowFilterInput').addEventListener('input', async (e)
 
 
 
-// --- Modpack import (Modrinth .mrpack -> custom instance) ---
+// --- Modpack import (Modrinth .mrpack / CurseForge zip -> custom instance) ---
+let currentModpackSource = 'modrinth'
+function _mpApi(source){ return source === 'curseforge' ? window.NLCurseForge : window.NLModrinth }
+function _mpSetSource(source){
+    currentModpackSource = source
+    const bar = document.getElementById('modpackSourceToggle')
+    if(bar){ Array.from(bar.children).forEach(b => { if(b.getAttribute('data-source') === source) b.setAttribute('selected', ''); else b.removeAttribute('selected') }) }
+}
 async function openModpackSearch(){
+    _mpSetSource('modrinth')
     document.getElementById('modpackSearchInput').value = ''
     document.getElementById('modpackResults').innerHTML = ''
     toggleOverlay(true, true, 'modpackContent')
@@ -917,11 +925,16 @@ async function openModpackSearch(){
 }
 
 async function runModpackSearch(){
+    const source = currentModpackSource
     const q = document.getElementById('modpackSearchInput').value.trim()
     const results = document.getElementById('modpackResults')
+    if(source === 'curseforge' && !window.NLCurseForge.hasKey()){
+        results.innerHTML = '<div style="opacity:0.7">CurseForge利用不可（APIキー未設定）</div>'
+        return
+    }
     results.innerHTML = '<div style="opacity:0.7">検索中...</div>'
     try {
-        const hits = await window.NLModrinth.searchModpacks(q)
+        const hits = await _mpApi(source).searchModpacks(q)
         if(hits.length === 0){ results.innerHTML = '<div style="opacity:0.7">見つかりませんでした</div>'; return }
         results.innerHTML = ''
         for(const h of hits){
@@ -935,7 +948,7 @@ async function runModpackSearch(){
                 </div>
                 <div class="modrinthActions"><button class="modrinthAddButton" type="button">選択</button></div>`
             const btn = row.getElementsByClassName('modrinthAddButton')[0]
-            btn.onclick = () => openModpackVersions(h)
+            btn.onclick = () => openModpackVersions(h, { source })
             results.appendChild(row)
         }
     } catch(err){
@@ -948,8 +961,9 @@ async function openModpackVersions(hit, opts){
     opts = opts || {}
     const results = document.getElementById('modpackResults')
     results.innerHTML = '<div style="opacity:0.7">バージョン取得中...</div>'
+    const source = opts.source || 'modrinth'
     try {
-        _mpVersions = await window.NLModrinth.getModpackVersions(hit.projectId)
+        _mpVersions = await _mpApi(source).getModpackVersions(hit.projectId)
     } catch(e){ results.innerHTML = '<div style="opacity:0.7">' + (e.message || '取得失敗') + '</div>'; return }
     if(!_mpVersions || _mpVersions.length === 0){ results.innerHTML = '<div style="opacity:0.7">導入可能なバージョンがありません</div>'; return }
     // Unique MC versions in newest-first encounter order.
@@ -999,15 +1013,15 @@ async function openModpackVersions(hit, opts){
         const chosen = matching[Number(verSel.value)]
         if(!chosen) return
         if(opts.onImport) opts.onImport(chosen)
-        else importModpackVersion(hit, chosen)
+        else importModpackVersion(hit, chosen, source)
     }
 }
 
-async function importModpackVersion(hit, version){
+async function importModpackVersion(hit, version, source){
     const btn = document.getElementById('modpackImportBtn')
     btn.setAttribute('disabled', ''); btn.textContent = '導入中...'
     try {
-        const res = await window.NLModpack.importModrinthModpack(hit, version.file, (i, n) => { btn.textContent = `導入中 ${i}/${n}` })
+        const res = await window.NLModpack.importModpack(source || 'modrinth', hit, version.file, (i, n) => { btn.textContent = `導入中 ${i}/${n}` })
         btn.textContent = '完了'
         if(res.failed && res.failed.length){
             setOverlayContent('一部のMODを取得できませんでした', res.failed.slice(0, 10).join('\n') + (res.failed.length > 10 ? '\n…' : ''), 'OK')
@@ -1030,6 +1044,7 @@ function openModpackVersionChange(instanceId){
     if(!src || src.provider !== 'modrinth'){ return }
     toggleOverlay(true, true, 'modpackContent')
     openModpackVersions({ projectId: src.projectId, title: ins.name || 'modpack' }, {
+        source: src.provider || 'modrinth',
         currentVersionId: src.versionId,
         importLabel: '適用',
         onImport: (version) => changeModpackVersion(instanceId, version),
@@ -1066,4 +1081,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if(mpInput) mpInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); runModpackSearch() } })
     const mpCancel = document.getElementById('modpackCancel')
     if(mpCancel) mpCancel.addEventListener('click', () => toggleOverlay(false))
+    const mpToggle = document.getElementById('modpackSourceToggle')
+    if(mpToggle){
+        Array.from(mpToggle.children).forEach(b => {
+            b.addEventListener('click', () => { _mpSetSource(b.getAttribute('data-source')); runModpackSearch() })
+        })
+    }
 })
