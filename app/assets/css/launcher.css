@@ -4833,6 +4833,27 @@ form[name='submitSecretQuestion'] p {
     font-weight: bold;
 }
 #customInstanceCreateButton:hover { box-shadow: 0 0 10px 0 #fff; }
+#customModpackButton {
+    margin-top: 8px;
+    background: none;
+    border: 1px solid #fff;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-weight: bold;
+}
+#customModpackButton:hover { box-shadow: 0 0 10px 0 #fff; }
+#modpackContent {
+    display: flex; flex-direction: column; align-items: center; height: 75%; width: 460px; margin: 0 auto; color: #fff;
+}
+#modpackHeader { font-size: 20px; font-weight: bold; margin-bottom: 16px; }
+#modpackSearchBar { display: flex; gap: 8px; width: 100%; margin-bottom: 12px; }
+#modpackSearchInput { flex: 1 1 auto; background: rgba(255,255,255,0.85); border: 2px solid rgba(255,255,255,0.75); border-radius: 3px; padding: 6px; }
+#modpackSearchButton, #modpackCancel { background: none; border: 1px solid #fff; color: #fff; border-radius: 3px; padding: 6px 14px; cursor: pointer; font-weight: bold; }
+#modpackSearchButton:hover, #modpackCancel:hover { box-shadow: 0 0 10px 0 #fff; }
+#modpackResults { width: 100%; flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+#modpackActions { margin-top: 12px; }
 .customInstanceListing {
     display: flex;
     align-items: center;
