@@ -59,16 +59,24 @@
         }))
     }
 
-    async function getModpackFile(projectId){
+    // All importable versions of a modpack (those that ship a .mrpack), newest first.
+    async function getModpackVersions(projectId){
         const list = await getJson(`${API}/project/${encodeURIComponent(projectId)}/version`)
-        if(!Array.isArray(list) || list.length === 0) return null
-        const sorted = list.slice().sort((a, b) => new Date(b.date_published || 0) - new Date(a.date_published || 0))
-        for(const v of sorted){
+        if(!Array.isArray(list)) return []
+        const out = []
+        for(const v of list){
             const files = v.files || []
             const primary = files.find(f => f.primary && /\.mrpack$/i.test(f.filename)) || files.find(f => /\.mrpack$/i.test(f.filename))
-            if(primary) return { url: primary.url, filename: primary.filename, versionId: v.id }
+            if(!primary) continue
+            out.push({
+                versionId: v.id, versionNumber: v.version_number, name: v.name,
+                gameVersions: v.game_versions || [], loaders: v.loaders || [],
+                datePublished: v.date_published,
+                file: { url: primary.url, filename: primary.filename, versionId: v.id }
+            })
         }
-        return null
+        out.sort((a, b) => new Date(b.datePublished || 0) - new Date(a.datePublished || 0))
+        return out
     }
 
     function primaryFile(files){
@@ -112,5 +120,5 @@
         return { files: out, unresolved }
     }
 
-    window.NLModrinth = { search, getBestVersion, collectRequired, searchModpacks, getModpackFile }
+    window.NLModrinth = { search, getBestVersion, collectRequired, searchModpacks, getModpackVersions }
 })()
