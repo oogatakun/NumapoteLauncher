@@ -53,6 +53,8 @@ function setupSettingsTabs(){
  */
 function settingsNavItemListener(ele, fade = true){
     if(ele.hasAttribute('selected')){
+        // Even when the Mod tab is already active, refresh it against the current instance.
+        if(ele.getAttribute('rSc') === 'settingsTabMods'){ try { reloadDropinMods() } catch(e){ /* ignore */ } }
         return
     }
     const navItems = document.getElementsByClassName('settingsNavItem')
