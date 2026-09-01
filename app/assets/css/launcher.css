@@ -4917,6 +4917,14 @@ form[name='submitSecretQuestion'] p {
 .customInstanceListing[selected], .customInstanceListing:hover { opacity: 1; border-color: #fff; }
 .customInstanceListing[selected] { background: rgba(255, 255, 255, 0.08); }
 .customInstanceInfo { min-width: 0; }
+.customInstanceNameRow { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.customInstanceNameRow .customInstanceName { flex: 1 1 auto; }
+.customFavorite { flex: 0 0 auto; background: none; border: none; color: rgba(255,255,255,0.5); font-size: 15px; line-height: 1; padding: 0 2px; cursor: pointer; }
+.customFavorite:hover { color: #f5c518; }
+.customFavorite.on { color: #f5c518; }
+.customInstanceListing.dragging { opacity: 0.45; }
+.customInstanceListing.dragover { border-color: #7ad67a; box-shadow: 0 0 0 1px #7ad67a inset; }
+.customInstanceListing { -webkit-user-select: none; user-select: none; }
 .customInstanceName { font-weight: bold; font-size: 13px; line-height: 20px; height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .customInstanceMeta { font-size: 11px; color: rgba(202,202,202,0.8); margin-top: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .customInstanceActions { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 5px; }

@@ -386,11 +386,13 @@ function setServerTab(tab){
     }
 }
 
+let _dragCid = null
 function populateCustomInstanceListings(){
     const el = document.getElementById('customInstanceListScrollable')
     if(!el) return
-    const instances = ConfigManager.getCustomInstances()
     const selected = ConfigManager.getSelectedServer()
+    // Favorites pinned on top (stable sort keeps array order within each group).
+    const instances = ConfigManager.getCustomInstances().slice().sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0))
     if(instances.length === 0){
         el.innerHTML = '<div style="grid-column:1 / -1;width:100%;text-align:center;opacity:0.7">まだ自作パックがありません</div>'
         return
@@ -399,9 +401,12 @@ function populateCustomInstanceListings(){
     for(const ins of instances){
         const loaderLabel = ins.loader === 'vanilla' ? 'バニラ' : `${ins.loader} ${ins.loaderVersion}`
         const nameEsc = (ins.name || '無題の構成').replace(/</g, '&lt;')
-        html += `<div class="customInstanceListing" cid="${ins.id}" ${ins.id === selected ? 'selected' : ''}>
+        html += `<div class="customInstanceListing" cid="${ins.id}" draggable="true" ${ins.id === selected ? 'selected' : ''}>
             <div class="customInstanceInfo">
-                <div class="customInstanceName">${nameEsc}</div>
+                <div class="customInstanceNameRow">
+                    <button class="customFavorite ${ins.favorite ? 'on' : ''}" cid="${ins.id}" type="button" title="お気に入り">${ins.favorite ? '★' : '☆'}</button>
+                    <div class="customInstanceName">${nameEsc}</div>
+                </div>
                 <div class="customInstanceMeta">${ins.minecraftVersion} / ${loaderLabel}</div>
             </div>
             <div class="customInstanceActions">
@@ -502,6 +507,46 @@ function setCustomInstanceHandlers(){
     // Share an instance as a code
     Array.from(document.getElementsByClassName('customShare')).forEach(b => {
         b.onclick = (e) => { e.stopPropagation(); openShareCode(b.getAttribute('cid')) }
+    })
+    // Favorite toggle (pins to top)
+    Array.from(document.getElementsByClassName('customFavorite')).forEach(b => {
+        b.onclick = (e) => {
+            e.stopPropagation()
+            const cid = b.getAttribute('cid')
+            const ins = ConfigManager.getCustomInstance(cid)
+            ConfigManager.updateCustomInstance(cid, { favorite: !(ins && ins.favorite) })
+            ConfigManager.save()
+            populateCustomInstanceListings()
+        }
+    })
+    // Drag-and-drop reorder
+    Array.from(document.getElementsByClassName('customInstanceListing')).forEach(row => {
+        row.addEventListener('dragstart', (e) => {
+            _dragCid = row.getAttribute('cid')
+            row.classList.add('dragging')
+            try { e.dataTransfer.effectAllowed = 'move' } catch(err){ /* ignore */ }
+        })
+        row.addEventListener('dragend', () => {
+            row.classList.remove('dragging')
+            Array.from(document.getElementsByClassName('customInstanceListing')).forEach(r => r.classList.remove('dragover'))
+            _dragCid = null
+        })
+        row.addEventListener('dragover', (e) => {
+            if(!_dragCid) return
+            e.preventDefault()
+            try { e.dataTransfer.dropEffect = 'move' } catch(err){ /* ignore */ }
+            if(row.getAttribute('cid') !== _dragCid) row.classList.add('dragover')
+        })
+        row.addEventListener('dragleave', () => row.classList.remove('dragover'))
+        row.addEventListener('drop', (e) => {
+            e.preventDefault()
+            const targetCid = row.getAttribute('cid')
+            if(_dragCid && targetCid && _dragCid !== targetCid){
+                ConfigManager.moveCustomInstance(_dragCid, targetCid)
+                ConfigManager.save()
+                populateCustomInstanceListings()
+            }
+        })
     })
     // Change modpack version (modpack-derived instances only)
     Array.from(document.getElementsByClassName('customModpackVersion')).forEach(b => {

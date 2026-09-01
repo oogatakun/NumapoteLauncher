@@ -663,6 +663,22 @@ exports.addCustomInstance = function(instance){
 }
 
 /**
+ * Move a custom instance so it sits just before targetId in the array
+ * (or to the end when targetId is not found).
+ * @param {string} id
+ * @param {string} targetId
+ */
+exports.moveCustomInstance = function(id, targetId){
+    const list = ensureCustomInstances()
+    const from = list.findIndex(x => x && x.id === id)
+    if(from < 0) return
+    const [item] = list.splice(from, 1)
+    let to = list.findIndex(x => x && x.id === targetId)
+    if(to < 0) to = list.length
+    list.splice(to, 0, item)
+}
+
+/**
  * Merge a patch into an existing custom instance.
  * @param {string} id
  * @param {Object} patch
