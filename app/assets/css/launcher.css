@@ -4861,6 +4861,19 @@ form[name='submitSecretQuestion'] p {
 #modpackSearchButton:hover, #modpackCancel:hover { box-shadow: 0 0 10px 0 #fff; }
 #modpackResults { width: 100%; flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 #modpackActions { margin-top: 12px; }
+#modpackProgress { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; flex: 1 1 auto; justify-content: center; }
+#modpackProgressTitle { font-weight: bold; }
+#modpackProgressText { font-size: 12px; opacity: 0.85; }
+.modpackBar { width: 80%; height: 14px; border: 1px solid rgba(255,255,255,0.6); border-radius: 7px; overflow: hidden; background: rgba(0,0,0,0.35); }
+.modpackBarInner { width: 0%; height: 100%; background: rgba(255,255,255,0.75); transition: width 0.2s ease; }
+#modpackCancelBtn { background: none; border: 1px solid #d67a7a; color: #d67a7a; border-radius: 3px; padding: 6px 20px; cursor: pointer; font-weight: bold; }
+#modpackCancelBtn:hover { box-shadow: 0 0 10px 0 #d67a7a; }
+#modpackCancelBtn[disabled] { opacity: 0.5; cursor: default; }
+.clickableTitle { cursor: pointer; }
+.clickableTitle:hover { text-decoration: underline; }
+.modOriginBadge { display: inline-block; margin-left: 8px; font-size: 10px; padding: 1px 6px; border-radius: 8px; vertical-align: middle; }
+.modOriginBadge.pack { background: rgba(122,214,122,0.2); border: 1px solid #7ad67a; color: #7ad67a; }
+.modOriginBadge.user { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.6); color: #fff; }
 .modpackVersionPanel { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 4px 2px; }
 .modpackVersionTitle { font-weight: bold; margin-bottom: 8px; }
 .modpackVersionPanel label { font-size: 12px; opacity: 0.85; }

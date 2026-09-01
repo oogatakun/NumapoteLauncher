@@ -820,13 +820,22 @@ async function resolveDropinModsForUI(){
 
     let dropinMods = ''
 
+    // Distinguish pack-managed mods from user-added ones (modpack instances only).
+    const _selId = serv.rawServer.id
+    const _ins = ConfigManager.getCustomInstance(_selId)
+    const _showOrigin = !!(_ins && _ins.modpackSource)
+    const _managed = new Set((_ins && _ins.managedFiles) || [])
+
     for(const dropin of CACHE_DROPIN_MODS){
+        const _base = dropin.fullName.replace(/\.disabled$/i, '')
+        const _isPack = _managed.has('mods/' + _base)
+        const _badge = _showOrigin ? `<span class="modOriginBadge ${_isPack ? 'pack' : 'user'}">${_isPack ? 'パック' : '自分'}</span>` : ''
         dropinMods += `<div id="${dropin.fullName}" class="settingsBaseMod settingsDropinMod" ${!dropin.disabled ? 'enabled' : ''}>
                     <div class="settingsModContent">
                         <div class="settingsModMainWrapper">
                             <div class="settingsModStatus"></div>
                             <div class="settingsModDetails">
-                                <span class="settingsModName">${dropin.name}</span>
+                                <span class="settingsModName">${dropin.name}</span>${_badge}
                                 <div class="settingsDropinRemoveWrapper">
                                     <button class="settingsDropinRemoveButton" remmod="${dropin.fullName}">${Lang.queryJS('settings.dropinMods.removeButton')}</button>
                                 </div>
@@ -2187,6 +2196,9 @@ async function runOnlineModSearch(){
                 </div>
                 <div class="modrinthActions"></div>`
             results.appendChild(row)
+            const _titleEl = row.getElementsByClassName('modrinthResultTitle')[0]
+            const _url = source === 'curseforge' ? (h.websiteUrl || '') : (h.slug ? ('https://modrinth.com/project/' + h.slug) : '')
+            if(_titleEl && _url){ _titleEl.classList.add('clickableTitle'); _titleEl.onclick = () => { try { shell.openExternal(_url) } catch(e){ /* ignore */ } } }
             renderOnlineActions(row.getElementsByClassName('modrinthActions')[0], h, ctx, source)
         }
     } catch(err){
