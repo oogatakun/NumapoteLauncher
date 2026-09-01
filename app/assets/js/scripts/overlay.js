@@ -400,7 +400,7 @@ function populateCustomInstanceListings(){
         const loaderLabel = ins.loader === 'vanilla' ? 'バニラ' : `${ins.loader} ${ins.loaderVersion}`
         const nameEsc = (ins.name || '無題の構成').replace(/</g, '&lt;')
         html += `<div class="customInstanceListing" cid="${ins.id}" ${ins.id === selected ? 'selected' : ''}>
-            <div>
+            <div class="customInstanceInfo">
                 <div class="customInstanceName">${nameEsc}</div>
                 <div class="customInstanceMeta">${ins.minecraftVersion} / ${loaderLabel}</div>
             </div>
