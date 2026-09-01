@@ -925,9 +925,9 @@ async function runModpackSearch(){
                     <div class="modrinthResultTitle">${_mrEsc(h.title)}</div>
                     <div class="modrinthResultMeta">${_mrEsc(h.author)} ・ DL ${Number(h.downloads||0).toLocaleString()}</div>
                 </div>
-                <div class="modrinthActions"><button class="modrinthAddButton" type="button">導入</button></div>`
+                <div class="modrinthActions"><button class="modrinthAddButton" type="button">選択</button></div>`
             const btn = row.getElementsByClassName('modrinthAddButton')[0]
-            btn.onclick = () => importModpack(h, btn)
+            btn.onclick = () => openModpackVersions(h)
             results.appendChild(row)
         }
     } catch(err){
@@ -935,10 +935,52 @@ async function runModpackSearch(){
     }
 }
 
-async function importModpack(hit, btn){
+let _mpVersions = null
+async function openModpackVersions(hit){
+    const results = document.getElementById('modpackResults')
+    results.innerHTML = '<div style="opacity:0.7">バージョン取得中...</div>'
+    try {
+        _mpVersions = await window.NLModrinth.getModpackVersions(hit.projectId)
+    } catch(e){ results.innerHTML = '<div style="opacity:0.7">' + (e.message || '取得失敗') + '</div>'; return }
+    if(!_mpVersions || _mpVersions.length === 0){ results.innerHTML = '<div style="opacity:0.7">導入可能なバージョンがありません</div>'; return }
+    // Unique MC versions in newest-first encounter order.
+    const mcSet = []
+    for(const v of _mpVersions){ for(const g of v.gameVersions){ if(!mcSet.includes(g)) mcSet.push(g) } }
+    results.innerHTML = `
+        <div class="modpackVersionPanel">
+            <div class="modpackVersionTitle">${_mrEsc(hit.title)}</div>
+            <label>Minecraftバージョン</label>
+            <select id="modpackMcSelect">${mcSet.map(m => `<option value="${_mrEsc(m)}">${_mrEsc(m)}</option>`).join('')}</select>
+            <label>modpackバージョン</label>
+            <select id="modpackVerSelect"></select>
+            <div class="modpackVersionActions">
+                <button id="modpackImportBtn" type="button">導入</button>
+                <button id="modpackBackBtn" type="button">戻る</button>
+            </div>
+        </div>`
+    const mcSel = document.getElementById('modpackMcSelect')
+    const verSel = document.getElementById('modpackVerSelect')
+    function fillVers(){
+        const mc = mcSel.value
+        const matching = _mpVersions.filter(v => v.gameVersions.includes(mc))
+        verSel.innerHTML = matching.map((v, idx) => `<option value="${idx}">${_mrEsc(v.versionNumber)}${v.loaders && v.loaders.length ? (' (' + _mrEsc(v.loaders.join('/')) + ')') : ''}</option>`).join('')
+        verSel._matching = matching
+    }
+    fillVers()
+    mcSel.onchange = fillVers
+    document.getElementById('modpackBackBtn').onclick = () => runModpackSearch()
+    document.getElementById('modpackImportBtn').onclick = () => {
+        const matching = verSel._matching || []
+        const chosen = matching[Number(verSel.value)]
+        if(chosen) importModpackVersion(hit, chosen)
+    }
+}
+
+async function importModpackVersion(hit, version){
+    const btn = document.getElementById('modpackImportBtn')
     btn.setAttribute('disabled', ''); btn.textContent = '導入中...'
     try {
-        const res = await window.NLModpack.importModrinthModpack(hit, (i, n) => { btn.textContent = `導入中 ${i}/${n}` })
+        const res = await window.NLModpack.importModrinthModpack(hit, version.file, (i, n) => { btn.textContent = `導入中 ${i}/${n}` })
         btn.textContent = '完了'
         if(res.failed && res.failed.length){
             setOverlayContent('一部のMODを取得できませんでした', res.failed.slice(0, 10).join('\n') + (res.failed.length > 10 ? '\n…' : ''), 'OK')

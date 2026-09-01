@@ -4860,6 +4860,14 @@ form[name='submitSecretQuestion'] p {
 #modpackSearchButton:hover, #modpackCancel:hover { box-shadow: 0 0 10px 0 #fff; }
 #modpackResults { width: 100%; flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 #modpackActions { margin-top: 12px; }
+.modpackVersionPanel { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 4px 2px; }
+.modpackVersionTitle { font-weight: bold; margin-bottom: 8px; }
+.modpackVersionPanel label { font-size: 12px; opacity: 0.85; }
+.modpackVersionPanel select { background: rgba(255,255,255,0.85); border: 2px solid rgba(255,255,255,0.75); border-radius: 3px; padding: 6px; margin-bottom: 4px; }
+.modpackVersionActions { display: flex; gap: 8px; margin-top: 10px; }
+.modpackVersionActions button { background: none; border: 1px solid #fff; color: #fff; border-radius: 3px; padding: 6px 16px; cursor: pointer; font-weight: bold; }
+.modpackVersionActions button:hover { box-shadow: 0 0 10px 0 #fff; }
+.modpackVersionActions button[disabled] { opacity: 0.5; cursor: default; }
 .customInstanceListing {
     display: flex;
     align-items: center;

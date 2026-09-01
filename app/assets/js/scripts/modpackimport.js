@@ -13,11 +13,14 @@
     function safeSlug(s){ return String(s || 'pack').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60) }
     function genId(){ return 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) }
 
-    async function importModrinthModpack(hit, onProgress){
+    async function importModrinthModpack(hit, file, onProgress){
         const commonDir = ConfigManager.getCommonDirectory()
-        const file = await window.NLModrinth.getModpackFile(hit.projectId)
+        if(!file){
+            const vers = await window.NLModrinth.getModpackVersions(hit.projectId)
+            file = vers[0] && vers[0].file
+        }
         if(!file) throw new Error('このパックに.mrpackファイルが見つかりません')
-        const mrpackPath = path.join(commonDir, 'temp', safeSlug(hit.slug || hit.title) + '.mrpack')
+        const mrpackPath = path.join(commonDir, 'temp', safeSlug((hit.slug || hit.title) + '-' + (file.versionId || '')) + '.mrpack')
         if(!fs.existsSync(mrpackPath)){ await downloadFile(file.url, mrpackPath) }
         const zip = new StreamZip.async({ file: mrpackPath })
         let result
