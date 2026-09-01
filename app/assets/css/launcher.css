@@ -4877,7 +4877,8 @@ form[name='submitSecretQuestion'] p {
 .modpackVersionPanel { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 4px 2px; }
 .modpackVersionTitle { font-weight: bold; margin-bottom: 8px; }
 .modpackVersionPanel label { font-size: 12px; opacity: 0.85; }
-.modpackVersionPanel select { background: rgba(255,255,255,0.85); border: 2px solid rgba(255,255,255,0.75); border-radius: 3px; padding: 6px; margin-bottom: 4px; }
+.modpackVersionPanel select, .modpackVersionPanel input { background: rgba(255,255,255,0.85); border: 2px solid rgba(255,255,255,0.75); border-radius: 3px; padding: 6px; margin-bottom: 4px; box-sizing: border-box; }
+.customRenameInput { width: 100%; background: rgba(255,255,255,0.9); border: 1px solid rgba(255,255,255,0.75); border-radius: 3px; padding: 2px 4px; color: #000; font-size: 13px; box-sizing: border-box; }
 .modpackVersionActions { display: flex; gap: 8px; margin-top: 10px; }
 .modpackVersionActions button { background: none; border: 1px solid #fff; color: #fff; border-radius: 3px; padding: 6px 16px; cursor: pointer; font-weight: bold; }
 .modpackVersionActions button:hover { box-shadow: 0 0 10px 0 #fff; }

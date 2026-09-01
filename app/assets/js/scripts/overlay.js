@@ -406,6 +406,7 @@ function populateCustomInstanceListings(){
             </div>
             <div class="customInstanceActions">
                 ${ins.modpackSource ? `<button class="customModpackVersion" cid="${ins.id}" type="button">版変更</button>` : ''}
+                <button class="customRename" cid="${ins.id}" type="button">改名</button>
                 <button class="customOpenFolder" cid="${ins.id}" type="button">フォルダ</button>
                 <button class="customDelete" cid="${ins.id}" type="button">削除</button>
             </div>
@@ -445,6 +446,41 @@ function setCustomInstanceHandlers(){
             const ins = ConfigManager.getCustomInstance(cid)
             if(btn && ins) btn.innerHTML = '&#8226; ' + (ins.name || '無題の構成')
             toggleOverlay(false)
+        }
+    })
+    // Rename an instance inline
+    Array.from(document.getElementsByClassName('customRename')).forEach(b => {
+        b.onclick = (e) => {
+            e.stopPropagation()
+            const cid = b.getAttribute('cid')
+            const row = document.querySelector(`.customInstanceListing[cid="${cid}"]`)
+            const nameEl = row && row.getElementsByClassName('customInstanceName')[0]
+            if(!nameEl || nameEl.getElementsByTagName('input').length > 0) return
+            const cur = nameEl.textContent
+            const input = document.createElement('input')
+            input.type = 'text'; input.value = cur; input.className = 'customRenameInput'
+            input.onclick = (ev) => ev.stopPropagation()
+            let done = false
+            const commit = (save) => {
+                if(done) return
+                done = true
+                const val = input.value.trim()
+                if(save && val && val !== cur){
+                    ConfigManager.updateCustomInstance(cid, { name: val }); ConfigManager.save()
+                    nameEl.textContent = val
+                    if(ConfigManager.getSelectedServer() === cid){
+                        const sb = document.getElementById('server_selection_button')
+                        if(sb) sb.innerHTML = '&#8226; ' + val
+                    }
+                } else {
+                    nameEl.textContent = cur
+                }
+            }
+            input.onkeydown = (ev) => { if(ev.key === 'Enter'){ ev.preventDefault(); commit(true) } else if(ev.key === 'Escape'){ ev.preventDefault(); commit(false) } }
+            input.onblur = () => commit(true)
+            nameEl.textContent = ''
+            nameEl.appendChild(input)
+            input.focus(); input.select()
         }
     })
     // Change modpack version (modpack-derived instances only)
@@ -1014,9 +1050,12 @@ async function openModpackVersions(hit, opts){
         if(cur && cur.gameVersions.length && mcSet.includes(cur.gameVersions[0])) initMc = cur.gameVersions[0]
     }
     const importLabel = opts.importLabel || '導入'
+    const showName = !opts.currentVersionId
+    const nameField = showName ? `<label>名前</label><input type="text" id="modpackNameInput" value="${_mrEsc(hit.title || '')}">` : ''
     results.innerHTML = `
         <div class="modpackVersionPanel">
             <div class="modpackVersionTitle">${_mrEsc(hit.title)}</div>
+            ${nameField}
             <label>Minecraftバージョン</label>
             <select id="modpackMcSelect">${mcSet.map(m => `<option value="${_mrEsc(m)}"${m === initMc ? ' selected' : ''}>${_mrEsc(m)}</option>`).join('')}</select>
             <label>modpackバージョン</label>
@@ -1069,9 +1108,11 @@ function _modpackFinishNotice(res){
 }
 
 async function importModpackVersion(hit, version, source){
-    const ui = _modpackProgressUI(hit.title || 'modpack')
+    const nameEl = document.getElementById('modpackNameInput')
+    const nameOverride = nameEl ? nameEl.value.trim() : ''
+    const ui = _modpackProgressUI(nameOverride || hit.title || 'modpack')
     try {
-        const res = await window.NLModpack.importModpack(source || 'modrinth', hit, version.file, ui.onProgress, ui.token)
+        const res = await window.NLModpack.importModpack(source || 'modrinth', hit, version.file, ui.onProgress, ui.token, nameOverride)
         ui.cleanup()
         _modpackFinishNotice(res)
     } catch(err){
