@@ -21,6 +21,7 @@
                 <div id="customCreateButtons">
                     <button id="customInstanceCreateButton" type="button">＋ 新規作成</button>
                     <button id="customModpackButton" type="button">modpackから作成</button>
+                    <button id="customReceiveButton" type="button">コードで受け取り</button>
                 </div>
             </div>
         </div>
@@ -140,6 +141,26 @@
         <div id="modrinthResults"><!-- results here --></div>
         <div id="modrinthActions">
             <button id="modrinthCancel" class="overlayKeybindEsc" type="button">閉じる</button>
+        </div>
+    </div>
+    <div id="shareCodeContent" style="display: none;">
+        <span id="shareCodeHeader">構成を共有</span>
+        <div id="shareCodeDesc">このコードを相手に渡してください。「コードで受け取り」で復元できます。</div>
+        <textarea id="shareCodeText" readonly></textarea>
+        <div id="shareCodeActions">
+            <button id="shareCodeCopy" type="button">コードをコピー</button>
+            <button id="shareCodeCopyUrl" type="button">URLをコピー</button>
+            <button id="shareCodeCancel" class="overlayKeybindEsc" type="button">閉じる</button>
+        </div>
+    </div>
+    <div id="shareImportContent" style="display: none;">
+        <span id="shareImportHeader">コードで受け取り</span>
+        <div id="shareImportDesc">共有コード（または numapote:// URL）を貼り付けてください。</div>
+        <textarea id="shareImportText" placeholder="NLPACK1... または numapote://share/..."></textarea>
+        <div id="shareImportStatus"></div>
+        <div id="shareImportActions">
+            <button id="shareImportBtn" type="button">取り込み</button>
+            <button id="shareImportCancel" class="overlayKeybindEsc" type="button">キャンセル</button>
         </div>
     </div>
     <script src="./assets/js/scripts/overlay.js"></script>

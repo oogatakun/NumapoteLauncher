@@ -59,6 +59,13 @@
         }))
     }
 
+    async function getVersionById(versionId){
+        let v
+        try { v = await getJson(`${API}/version/${encodeURIComponent(versionId)}`) } catch(e) { return null }
+        if(!v || !v.id) return null
+        return { versionId: v.id, versionNumber: v.version_number, datePublished: v.date_published, files: v.files || [], dependencies: v.dependencies || [] }
+    }
+
     // All importable versions of a modpack (those that ship a .mrpack), newest first.
     async function getModpackVersions(projectId){
         const list = await getJson(`${API}/project/${encodeURIComponent(projectId)}/version`)
@@ -120,5 +127,5 @@
         return { files: out, unresolved }
     }
 
-    window.NLModrinth = { search, getBestVersion, collectRequired, searchModpacks, getModpackVersions }
+    window.NLModrinth = { search, getBestVersion, getVersionById, collectRequired, searchModpacks, getModpackVersions }
 })()
