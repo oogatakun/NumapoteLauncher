@@ -173,7 +173,12 @@ const _settingsMediaButton = document.getElementById('settingsMediaButton')
 if (_settingsMediaButton) {
     _settingsMediaButton.onclick = async e => {
         await prepareSettings()
-        switchView(getCurrentView(), VIEWS.settings)
+        switchView(getCurrentView(), VIEWS.settings, 500, 500, () => {
+            // Ensure the Mod tab reflects the currently selected instance on open.
+            if(typeof selectedSettingsTab !== 'undefined' && selectedSettingsTab === 'settingsTabMods'){
+                try { reloadDropinMods() } catch(err){ /* ignore */ }
+            }
+        })
     }
 }
 
