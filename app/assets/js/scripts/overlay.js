@@ -387,20 +387,33 @@ function setServerTab(tab){
 }
 
 let _dragCid = null
-// Find the nearest custom-instance card to a point and whether to drop after it
-// (right of its horizontal center). Lets the user drop anywhere in the list
-// instead of having to land precisely on a target cell's right half.
-function _dropTarget(x, y){
+let _grabDX = 0, _grabDY = 0, _dragW = 0, _dragH = 0
+const DROP_OVERLAP = 2 / 3
+// Find the card the dragged ghost overlaps most; only returns a target once the
+// overlap covers at least DROP_OVERLAP of that card. `after` places the dragged
+// item into the target's slot (after it when the drag came from earlier in the
+// list, before it otherwise). `ghost` is the dragged card's current rect.
+function _dropTarget(ghost){
     const cells = Array.from(document.querySelectorAll('#customInstanceListScrollable .customInstanceListing'))
-    let best = null, bestD = Infinity
-    for(const c of cells){
+    const dragIdx = cells.findIndex(c => c.getAttribute('cid') === _dragCid)
+    let best = null, bestRatio = 0, bestIdx = -1
+    for(let i = 0; i < cells.length; i++){
+        const c = cells[i]
+        if(c.getAttribute('cid') === _dragCid) continue
         const r = c.getBoundingClientRect()
-        const cx = r.left + r.width / 2, cy = r.top + r.height / 2
-        const d = (x - cx) * (x - cx) + (y - cy) * (y - cy)
-        if(d < bestD){ bestD = d; best = { cid: c.getAttribute('cid'), cx } }
+        const ix = Math.max(0, Math.min(ghost.right, r.right) - Math.max(ghost.left, r.left))
+        const iy = Math.max(0, Math.min(ghost.bottom, r.bottom) - Math.max(ghost.top, r.top))
+        const area = r.width * r.height
+        const ratio = area > 0 ? (ix * iy) / area : 0
+        if(ratio > bestRatio){ bestRatio = ratio; best = c; bestIdx = i }
     }
-    if(!best) return null
-    return { cid: best.cid, after: x > best.cx }
+    if(!best || bestRatio < DROP_OVERLAP) return null
+    return { cid: best.getAttribute('cid'), after: dragIdx >= 0 && dragIdx < bestIdx }
+}
+// Reconstruct the dragged ghost's rect from the pointer and the grab offset.
+function _ghostRect(x, y){
+    const left = x - _grabDX, top = y - _grabDY
+    return { left, top, right: left + _dragW, bottom: top + _dragH }
 }
 function populateCustomInstanceListings(){
     const el = document.getElementById('customInstanceListScrollable')
@@ -422,8 +435,8 @@ function populateCustomInstanceListings(){
             const margin = 40
             if(e.clientY < rect.top + margin) el.scrollTop -= 14
             else if(e.clientY > rect.bottom - margin) el.scrollTop += 14
-            // Insertion indicator on the nearest card (drop anywhere in the list).
-            const t = _dropTarget(e.clientX, e.clientY)
+            // Insertion indicator on the card the ghost overlaps by >= 2/3.
+            const t = _dropTarget(_ghostRect(e.clientX, e.clientY))
             clearIndicators()
             if(t && t.cid !== _dragCid){
                 const row = el.querySelector(`.customInstanceListing[cid="${t.cid}"]`)
@@ -433,7 +446,7 @@ function populateCustomInstanceListings(){
         el.addEventListener('drop', (e) => {
             e.preventDefault()
             if(!_dragCid) return
-            const t = _dropTarget(e.clientX, e.clientY)
+            const t = _dropTarget(_ghostRect(e.clientX, e.clientY))
             clearIndicators()
             if(t && t.cid !== _dragCid){
                 ConfigManager.moveCustomInstance(_dragCid, t.cid, t.after)
@@ -581,6 +594,9 @@ function setCustomInstanceHandlers(){
     Array.from(document.getElementsByClassName('customInstanceListing')).forEach(row => {
         row.addEventListener('dragstart', (e) => {
             _dragCid = row.getAttribute('cid')
+            const r = row.getBoundingClientRect()
+            _grabDX = e.clientX - r.left; _grabDY = e.clientY - r.top
+            _dragW = r.width; _dragH = r.height
             row.classList.add('dragging')
             try { e.dataTransfer.effectAllowed = 'move' } catch(err){ /* ignore */ }
         })
