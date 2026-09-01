@@ -668,13 +668,14 @@ exports.addCustomInstance = function(instance){
  * @param {string} id
  * @param {string} targetId
  */
-exports.moveCustomInstance = function(id, targetId){
+exports.moveCustomInstance = function(id, targetId, after){
     const list = ensureCustomInstances()
     const from = list.findIndex(x => x && x.id === id)
     if(from < 0) return
     const [item] = list.splice(from, 1)
     let to = list.findIndex(x => x && x.id === targetId)
     if(to < 0) to = list.length
+    else if(after) to += 1
     list.splice(to, 0, item)
 }
 
