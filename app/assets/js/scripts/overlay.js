@@ -555,6 +555,7 @@ function setCustomInstanceHandlers(){
         row.addEventListener('dragleave', () => row.classList.remove('dragover'))
         row.addEventListener('drop', (e) => {
             e.preventDefault()
+            e.stopPropagation()
             const targetCid = row.getAttribute('cid')
             if(_dragCid && targetCid && _dragCid !== targetCid){
                 // Drop on the right half of the target = insert after it (lets a
@@ -563,7 +564,12 @@ function setCustomInstanceHandlers(){
                 const after = (e.clientX - rect.left) > rect.width / 2
                 ConfigManager.moveCustomInstance(_dragCid, targetCid, after)
                 ConfigManager.save()
-                populateCustomInstanceListings()
+                _dragCid = null
+                // Defer the re-render: mutating the DOM (replacing the dragged row)
+                // synchronously inside the drop event leaves the drag machinery in a
+                // broken state, so subsequent drags stop working. Let this drag finish
+                // first, then rebuild the list.
+                setTimeout(() => populateCustomInstanceListings(), 0)
             }
         })
     })
