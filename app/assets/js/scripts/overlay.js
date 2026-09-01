@@ -447,6 +447,11 @@ function setCustomInstanceHandlers(){
             const ins = ConfigManager.getCustomInstance(cid)
             if(btn && ins) btn.innerHTML = '&#8226; ' + (ins.name || '無題の構成')
             toggleOverlay(false)
+            // If we switched instance from within Settings (e.g. the Mod tab's switch-server
+            // button), refresh the settings tab so the Mod list reflects the new instance.
+            if(typeof getCurrentView === 'function' && getCurrentView() === VIEWS.settings && typeof animateSettingsTabRefresh === 'function'){
+                animateSettingsTabRefresh()
+            }
         }
     })
     // Rename an instance inline
