@@ -542,17 +542,23 @@ function setCustomInstanceHandlers(){
             try { e.dataTransfer.effectAllowed = 'move' } catch(err){ /* ignore */ }
         })
         row.addEventListener('dragend', () => {
-            row.classList.remove('dragging')
-            Array.from(document.getElementsByClassName('customInstanceListing')).forEach(r => r.classList.remove('dragover'))
+            Array.from(document.getElementsByClassName('customInstanceListing')).forEach(r => r.classList.remove('dragging', 'insert-before', 'insert-after'))
             _dragCid = null
         })
         row.addEventListener('dragover', (e) => {
             if(!_dragCid) return
             e.preventDefault()
             try { e.dataTransfer.dropEffect = 'move' } catch(err){ /* ignore */ }
-            if(row.getAttribute('cid') !== _dragCid) row.classList.add('dragover')
+            Array.from(document.getElementsByClassName('customInstanceListing')).forEach(r => r.classList.remove('insert-before', 'insert-after'))
+            if(row.getAttribute('cid') !== _dragCid){
+                // Show an insertion line on the side the item would land (left half =
+                // before this cell, right half = after it).
+                const rect = row.getBoundingClientRect()
+                const after = (e.clientX - rect.left) > rect.width / 2
+                row.classList.add(after ? 'insert-after' : 'insert-before')
+            }
         })
-        row.addEventListener('dragleave', () => row.classList.remove('dragover'))
+        row.addEventListener('dragleave', () => row.classList.remove('insert-before', 'insert-after'))
         row.addEventListener('drop', (e) => {
             e.preventDefault()
             e.stopPropagation()
