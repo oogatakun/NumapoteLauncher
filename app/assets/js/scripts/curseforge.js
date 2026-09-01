@@ -83,6 +83,13 @@
         return map
     }
 
+    async function getVersionById(fileId){
+        let body
+        try { body = await postJson('/mods/files', { fileIds: [Number(fileId)] }) } catch(e) { return null }
+        const f = (body.data || [])[0]
+        return f ? _mapFile(f) : null
+    }
+
     // Resolve modIds to { [modId]: {name, slug, websiteUrl} } in one call.
     async function getModsBulk(modIds){
         if(!modIds || modIds.length === 0) return {}
@@ -172,5 +179,5 @@
         return { files: out, unresolved }
     }
 
-    window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile, searchModpacks, getModpackVersions, resolveFiles, getModsBulk, postJson }
+    window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile, searchModpacks, getModpackVersions, resolveFiles, getModsBulk, getVersionById, postJson }
 })()

@@ -407,6 +407,7 @@ function populateCustomInstanceListings(){
             <div class="customInstanceActions">
                 ${ins.modpackSource ? `<button class="customModpackVersion" cid="${ins.id}" type="button">版変更</button>` : ''}
                 <button class="customRename" cid="${ins.id}" type="button">改名</button>
+                <button class="customShare" cid="${ins.id}" type="button">共有</button>
                 <button class="customOpenFolder" cid="${ins.id}" type="button">フォルダ</button>
                 <button class="customDelete" cid="${ins.id}" type="button">削除</button>
             </div>
@@ -482,6 +483,10 @@ function setCustomInstanceHandlers(){
             nameEl.appendChild(input)
             input.focus(); input.select()
         }
+    })
+    // Share an instance as a code
+    Array.from(document.getElementsByClassName('customShare')).forEach(b => {
+        b.onclick = (e) => { e.stopPropagation(); openShareCode(b.getAttribute('cid')) }
     })
     // Change modpack version (modpack-derived instances only)
     Array.from(document.getElementsByClassName('customModpackVersion')).forEach(b => {
@@ -1173,4 +1178,84 @@ document.addEventListener('DOMContentLoaded', () => {
             b.addEventListener('click', () => { _mpSetSource(b.getAttribute('data-source')); runModpackSearch() })
         })
     }
+})
+
+// --- Share / receive launch configs ---
+function openShareCode(cid){
+    const unknown = window.NLShare.collectUnknownJars(cid)
+    const proceed = (includeRaw) => {
+        try {
+            const built = window.NLShare.buildShareCode(cid, includeRaw)
+            const ta = document.getElementById('shareCodeText')
+            ta.value = built.code
+            ta.dataset.url = built.url
+            toggleOverlay(true, true, 'shareCodeContent')
+        } catch(err){ setOverlayContent('共有失敗', _mrEsc(err.message || '不明なエラー'), 'OK'); setOverlayHandler(null); toggleOverlay(true) }
+    }
+    if(unknown.length){
+        setOverlayContent('出所不明のMOD', '出所不明のMOD（' + unknown.length + '件）も共有しますか？\n' + _mrEsc(unknown.map(u => u.name).slice(0, 15).join('\n')), 'はい', 'いいえ')
+        setOverlayHandler(() => proceed(true))
+        setDismissHandler(() => proceed(false))
+        toggleOverlay(true, true)
+    } else {
+        proceed(false)
+    }
+}
+
+function openShareImport(){
+    const ta = document.getElementById('shareImportText')
+    if(ta) ta.value = ''
+    const st = document.getElementById('shareImportStatus')
+    if(st) st.textContent = ''
+    const btn = document.getElementById('shareImportBtn')
+    if(btn) btn.disabled = false
+    toggleOverlay(true, true, 'shareImportContent')
+}
+
+async function runShareImport(){
+    let payload
+    try { payload = window.NLShare.decodeShareCode(document.getElementById('shareImportText').value) }
+    catch(err){ setOverlayContent('コードエラー', _mrEsc(err.message || 'コードが不正です'), 'OK'); setOverlayHandler(null); toggleOverlay(true); return }
+    const doImport = async (includeRaw) => {
+        toggleOverlay(true, false, 'shareImportContent') // ESC off during import
+        const status = document.getElementById('shareImportStatus')
+        const btn = document.getElementById('shareImportBtn')
+        if(btn) btn.disabled = true
+        if(status) status.textContent = '取り込み中...'
+        try {
+            const res = await window.NLShare.importShareCode(payload, { includeRaw }, (i, n) => { if(status) status.textContent = 'MOD ' + i + ' / ' + n })
+            if(res.failed && res.failed.length){
+                setOverlayContent('一部のMODを取得できませんでした', _mrEsc(res.failed.slice(0, 10).join('\n')), 'OK')
+                setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) }); toggleOverlay(true)
+            } else {
+                await toggleServerSelection(true); setServerTab('custom')
+            }
+        } catch(err){
+            if(btn) btn.disabled = false
+            setOverlayContent('取り込み失敗', _mrEsc(err.message || '不明なエラー'), 'OK'); setOverlayHandler(null); toggleOverlay(true)
+        }
+    }
+    if(Array.isArray(payload.rawMods) && payload.rawMods.length){
+        setOverlayContent('出所不明のMOD', '出所不明のMOD（' + payload.rawMods.length + '件）をダウンロードしますか？\n' + _mrEsc(payload.rawMods.map(r => r.name).slice(0, 15).join('\n')), 'はい', 'いいえ')
+        setOverlayHandler(() => doImport(true))
+        setDismissHandler(() => doImport(false))
+        toggleOverlay(true, true)
+    } else {
+        doImport(false)
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const rb = document.getElementById('customReceiveButton')
+    if(rb) rb.addEventListener('click', () => openShareImport())
+    const cp = document.getElementById('shareCodeCopy')
+    if(cp) cp.addEventListener('click', () => { try { require('electron').clipboard.writeText(document.getElementById('shareCodeText').value) } catch(e){ /* ignore */ } })
+    const cpu = document.getElementById('shareCodeCopyUrl')
+    if(cpu) cpu.addEventListener('click', () => { try { require('electron').clipboard.writeText(document.getElementById('shareCodeText').dataset.url || '') } catch(e){ /* ignore */ } })
+    const scc = document.getElementById('shareCodeCancel')
+    if(scc) scc.addEventListener('click', () => toggleOverlay(false))
+    const sib = document.getElementById('shareImportBtn')
+    if(sib) sib.addEventListener('click', () => runShareImport())
+    const sic = document.getElementById('shareImportCancel')
+    if(sic) sic.addEventListener('click', () => toggleOverlay(false))
 })
