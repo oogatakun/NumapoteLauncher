@@ -76,7 +76,9 @@
     }
 
     // --- Download files + extract overrides; return placed relative paths ---
-    async function _apply(provider, archivePath, instDir, onProgress){
+    function _checkCancel(token){ if(token && token.cancelled){ throw new Error('__cancelled__') } }
+
+    async function _apply(provider, archivePath, instDir, onProgress, token){
         const managedFiles = []
         const failed = []
         const blockedManual = []
@@ -88,6 +90,7 @@
                 const list = manifest.files || []
                 const resolved = await window.NLCurseForge.resolveFiles(list.map(f => f.fileID))
                 for(let i = 0; i < list.length; i++){
+                    _checkCancel(token)
                     const r = resolved[String(list[i].fileID)]
                     const fileName = r && r.fileName
                     const url = r && r.downloadUrl
@@ -114,6 +117,7 @@
                 const index = JSON.parse((await zip.entryData('modrinth.index.json')).toString('utf8'))
                 const files = (index.files || []).filter(f => !(f.env && f.env.client === 'unsupported'))
                 for(let i = 0; i < files.length; i++){
+                    _checkCancel(token)
                     const f = files[i]
                     const dest = path.join(instDir, f.path)
                     if(!underDir(instDir, dest)){ failed.push(f.path); continue }
@@ -157,7 +161,7 @@
         return manualData.length
     }
 
-    async function importModpack(provider, hit, file, onProgress){
+    async function importModpack(provider, hit, file, onProgress, token){
         const commonDir = ConfigManager.getCommonDirectory()
         if(!file){
             const vers = await _api(provider).getModpackVersions(hit.projectId)
@@ -175,14 +179,24 @@
         })
         ConfigManager.save()
         const instDir = path.join(ConfigManager.getInstanceDirectory(), id)
-        const applied = await _apply(provider, archivePath, instDir, onProgress)
+        let applied
+        try {
+            applied = await _apply(provider, archivePath, instDir, onProgress, token)
+        } catch(err){
+            if(err && err.message === '__cancelled__'){
+                // Roll back the half-created instance.
+                ConfigManager.removeCustomInstance(id); ConfigManager.save()
+                try { fs.removeSync(instDir) } catch(e){ /* ignore */ }
+            }
+            throw err
+        }
         if(provider === 'curseforge'){ await _startManualDownloads(instDir, applied.blockedManual, applied.managedFiles) }
         ConfigManager.updateCustomInstance(id, { managedFiles: applied.managedFiles })
         ConfigManager.save()
         return { id, name, fileCount: applied.managedFiles.length, failed: applied.failed, blocked: (applied.blockedManual || []).length }
     }
 
-    async function changeModpackVersion(instanceId, file, onProgress){
+    async function changeModpackVersion(instanceId, file, onProgress, token){
         const commonDir = ConfigManager.getCommonDirectory()
         const ins = ConfigManager.getCustomInstance(instanceId)
         if(!ins) throw new Error('インスタンスが見つかりません')
@@ -195,7 +209,7 @@
             const dest = path.join(instDir, rel)
             if(underDir(instDir, dest) && fs.existsSync(dest)){ try { fs.removeSync(dest) } catch(e){ /* ignore */ } }
         }
-        const applied = await _apply(provider, archivePath, instDir, onProgress)
+        const applied = await _apply(provider, archivePath, instDir, onProgress, token)
         if(provider === 'curseforge'){ await _startManualDownloads(instDir, applied.blockedManual, applied.managedFiles) }
         ConfigManager.updateCustomInstance(instanceId, {
             minecraftVersion: meta.mc, loader: meta.loader, loaderVersion: meta.loaderVersion,

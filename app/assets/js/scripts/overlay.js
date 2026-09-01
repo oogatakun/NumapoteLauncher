@@ -911,6 +911,41 @@ document.getElementById('windowFilterInput').addEventListener('input', async (e)
 // --- Modpack import (Modrinth .mrpack / CurseForge zip -> custom instance) ---
 let currentModpackSource = 'modrinth'
 function _mpApi(source){ return source === 'curseforge' ? window.NLCurseForge : window.NLModrinth }
+function _projectUrl(source, hit){
+    if(!hit) return ''
+    if(source === 'curseforge') return hit.websiteUrl || ''
+    return hit.slug ? ('https://modrinth.com/project/' + hit.slug) : ''
+}
+// Show the modpack import progress panel (ESC disabled, cancel button). Returns
+// { token, onProgress, cleanup }.
+function _modpackProgressUI(name){
+    const results = document.getElementById('modpackResults')
+    const progress = document.getElementById('modpackProgress')
+    const closeBtn = document.getElementById('modpackCancel')
+    if(results) results.style.display = 'none'
+    if(closeBtn) closeBtn.style.display = 'none'
+    if(progress) progress.style.display = ''
+    document.getElementById('modpackProgressTitle').textContent = '導入中: ' + name
+    document.getElementById('modpackProgressText').textContent = ''
+    const inner = document.querySelector('#modpackProgress .modpackBarInner')
+    if(inner) inner.style.width = '0%'
+    toggleOverlay(true, false, 'modpackContent') // non-dismissable: ESC disabled
+    const token = { cancelled: false }
+    const cancelBtn = document.getElementById('modpackCancelBtn')
+    cancelBtn.disabled = false; cancelBtn.textContent = 'キャンセル'
+    cancelBtn.onclick = () => { token.cancelled = true; cancelBtn.disabled = true; cancelBtn.textContent = 'キャンセル中...' }
+    const onProgress = (i, n) => {
+        const pct = n > 0 ? Math.floor(i / n * 100) : 0
+        if(inner) inner.style.width = pct + '%'
+        document.getElementById('modpackProgressText').textContent = i + ' / ' + n
+    }
+    const cleanup = () => {
+        if(progress) progress.style.display = 'none'
+        if(results) results.style.display = ''
+        if(closeBtn) closeBtn.style.display = ''
+    }
+    return { token, onProgress, cleanup }
+}
 function _mpSetSource(source){
     currentModpackSource = source
     const bar = document.getElementById('modpackSourceToggle')
@@ -949,6 +984,9 @@ async function runModpackSearch(){
                 <div class="modrinthActions"><button class="modrinthAddButton" type="button">選択</button></div>`
             const btn = row.getElementsByClassName('modrinthAddButton')[0]
             btn.onclick = () => openModpackVersions(h, { source })
+            const titleEl = row.getElementsByClassName('modrinthResultTitle')[0]
+            const url = _projectUrl(source, h)
+            if(titleEl && url){ titleEl.classList.add('clickableTitle'); titleEl.onclick = () => { try { require('electron').shell.openExternal(url) } catch(e){ /* ignore */ } } }
             results.appendChild(row)
         }
     } catch(err){
@@ -988,6 +1026,9 @@ async function openModpackVersions(hit, opts){
                 <button id="modpackBackBtn" type="button">戻る</button>
             </div>
         </div>`
+    const titleEl2 = results.getElementsByClassName('modpackVersionTitle')[0]
+    const purl = _projectUrl(source, hit)
+    if(titleEl2 && purl){ titleEl2.classList.add('clickableTitle'); titleEl2.onclick = () => { try { require('electron').shell.openExternal(purl) } catch(e){ /* ignore */ } } }
     const mcSel = document.getElementById('modpackMcSelect')
     const verSel = document.getElementById('modpackVerSelect')
     function fillVers(){
@@ -1017,23 +1058,29 @@ async function openModpackVersions(hit, opts){
     }
 }
 
+function _modpackFinishNotice(res){
+    if(res.failed && res.failed.length){
+        setOverlayContent('一部のMODを取得できませんでした', res.failed.slice(0, 10).join('\n') + (res.failed.length > 10 ? '\n…' : ''), 'OK')
+        setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) })
+        toggleOverlay(true)
+    } else {
+        toggleServerSelection(true).then(() => setServerTab('custom'))
+    }
+}
+
 async function importModpackVersion(hit, version, source){
-    const btn = document.getElementById('modpackImportBtn')
-    btn.setAttribute('disabled', ''); btn.textContent = '導入中...'
+    const ui = _modpackProgressUI(hit.title || 'modpack')
     try {
-        const res = await window.NLModpack.importModpack(source || 'modrinth', hit, version.file, (i, n) => { btn.textContent = `導入中 ${i}/${n}` })
-        btn.textContent = '完了'
-        if(res.failed && res.failed.length){
-            setOverlayContent('一部のMODを取得できませんでした', res.failed.slice(0, 10).join('\n') + (res.failed.length > 10 ? '\n…' : ''), 'OK')
-            setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) })
-            toggleOverlay(true)
-        } else {
-            await toggleServerSelection(true); setServerTab('custom')
-        }
+        const res = await window.NLModpack.importModpack(source || 'modrinth', hit, version.file, ui.onProgress, ui.token)
+        ui.cleanup()
+        _modpackFinishNotice(res)
     } catch(err){
-        btn.removeAttribute('disabled'); btn.textContent = '再試行'
-        setOverlayContent('取り込み失敗', err.message || '不明なエラー', 'OK')
-        setOverlayHandler(null); toggleOverlay(true)
+        ui.cleanup()
+        if(err && err.message === '__cancelled__'){
+            toggleOverlay(true, true, 'modpackContent'); runModpackSearch()
+        } else {
+            setOverlayContent('取り込み失敗', err.message || '不明なエラー', 'OK'); setOverlayHandler(null); toggleOverlay(true)
+        }
     }
 }
 
@@ -1041,7 +1088,7 @@ async function importModpackVersion(hit, version, source){
 function openModpackVersionChange(instanceId){
     const ins = ConfigManager.getCustomInstance(instanceId)
     const src = ins && ins.modpackSource
-    if(!src || src.provider !== 'modrinth'){ return }
+    if(!src || (src.provider !== 'modrinth' && src.provider !== 'curseforge')){ return }
     toggleOverlay(true, true, 'modpackContent')
     openModpackVersions({ projectId: src.projectId, title: ins.name || 'modpack' }, {
         source: src.provider || 'modrinth',
@@ -1053,22 +1100,20 @@ function openModpackVersionChange(instanceId){
 }
 
 async function changeModpackVersion(instanceId, version){
-    const btn = document.getElementById('modpackImportBtn')
-    btn.setAttribute('disabled', ''); btn.textContent = '適用中...'
+    const ins = ConfigManager.getCustomInstance(instanceId)
+    const ui = _modpackProgressUI((ins && ins.name) || 'modpack')
     try {
-        const res = await window.NLModpack.changeModpackVersion(instanceId, version.file, (i, n) => { btn.textContent = `適用中 ${i}/${n}` })
-        btn.textContent = '完了'
-        if(res.failed && res.failed.length){
-            setOverlayContent('一部のMODを取得できませんでした', res.failed.slice(0, 10).join('\n') + (res.failed.length > 10 ? '\n…' : ''), 'OK')
-            setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) })
-            toggleOverlay(true)
-        } else {
-            await toggleServerSelection(true); setServerTab('custom')
-        }
+        const res = await window.NLModpack.changeModpackVersion(instanceId, version.file, ui.onProgress, ui.token)
+        ui.cleanup()
+        _modpackFinishNotice(res)
     } catch(err){
-        btn.removeAttribute('disabled'); btn.textContent = '再試行'
-        setOverlayContent('変更に失敗しました', err.message || '不明なエラー', 'OK')
-        setOverlayHandler(null); toggleOverlay(true)
+        ui.cleanup()
+        if(err && err.message === '__cancelled__'){
+            setOverlayContent('キャンセルしました', '一部のみ適用されています。', 'OK')
+            setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) }); toggleOverlay(true)
+        } else {
+            setOverlayContent('変更に失敗しました', err.message || '不明なエラー', 'OK'); setOverlayHandler(null); toggleOverlay(true)
+        }
     }
 }
 
