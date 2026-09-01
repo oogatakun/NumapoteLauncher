@@ -405,6 +405,7 @@ function populateCustomInstanceListings(){
                 <div class="customInstanceMeta">${ins.minecraftVersion} / ${loaderLabel}</div>
             </div>
             <div class="customInstanceActions">
+                ${ins.modpackSource ? `<button class="customModpackVersion" cid="${ins.id}" type="button">版変更</button>` : ''}
                 <button class="customOpenFolder" cid="${ins.id}" type="button">フォルダ</button>
                 <button class="customDelete" cid="${ins.id}" type="button">削除</button>
             </div>
@@ -444,6 +445,13 @@ function setCustomInstanceHandlers(){
             const ins = ConfigManager.getCustomInstance(cid)
             if(btn && ins) btn.innerHTML = '&#8226; ' + (ins.name || '無題の構成')
             toggleOverlay(false)
+        }
+    })
+    // Change modpack version (modpack-derived instances only)
+    Array.from(document.getElementsByClassName('customModpackVersion')).forEach(b => {
+        b.onclick = (e) => {
+            e.stopPropagation()
+            openModpackVersionChange(b.getAttribute('cid'))
         }
     })
     // Open folder
@@ -936,7 +944,8 @@ async function runModpackSearch(){
 }
 
 let _mpVersions = null
-async function openModpackVersions(hit){
+async function openModpackVersions(hit, opts){
+    opts = opts || {}
     const results = document.getElementById('modpackResults')
     results.innerHTML = '<div style="opacity:0.7">バージョン取得中...</div>'
     try {
@@ -946,15 +955,22 @@ async function openModpackVersions(hit){
     // Unique MC versions in newest-first encounter order.
     const mcSet = []
     for(const v of _mpVersions){ for(const g of v.gameVersions){ if(!mcSet.includes(g)) mcSet.push(g) } }
+    // Preselect the MC of the current version (change mode).
+    let initMc = mcSet[0]
+    if(opts.currentVersionId){
+        const cur = _mpVersions.find(v => v.versionId === opts.currentVersionId)
+        if(cur && cur.gameVersions.length && mcSet.includes(cur.gameVersions[0])) initMc = cur.gameVersions[0]
+    }
+    const importLabel = opts.importLabel || '導入'
     results.innerHTML = `
         <div class="modpackVersionPanel">
             <div class="modpackVersionTitle">${_mrEsc(hit.title)}</div>
             <label>Minecraftバージョン</label>
-            <select id="modpackMcSelect">${mcSet.map(m => `<option value="${_mrEsc(m)}">${_mrEsc(m)}</option>`).join('')}</select>
+            <select id="modpackMcSelect">${mcSet.map(m => `<option value="${_mrEsc(m)}"${m === initMc ? ' selected' : ''}>${_mrEsc(m)}</option>`).join('')}</select>
             <label>modpackバージョン</label>
             <select id="modpackVerSelect"></select>
             <div class="modpackVersionActions">
-                <button id="modpackImportBtn" type="button">導入</button>
+                <button id="modpackImportBtn" type="button">${_mrEsc(importLabel)}</button>
                 <button id="modpackBackBtn" type="button">戻る</button>
             </div>
         </div>`
@@ -963,16 +979,27 @@ async function openModpackVersions(hit){
     function fillVers(){
         const mc = mcSel.value
         const matching = _mpVersions.filter(v => v.gameVersions.includes(mc))
-        verSel.innerHTML = matching.map((v, idx) => `<option value="${idx}">${_mrEsc(v.versionNumber)}${v.loaders && v.loaders.length ? (' (' + _mrEsc(v.loaders.join('/')) + ')') : ''}</option>`).join('')
+        verSel.innerHTML = matching.map((v, idx) => {
+            const cur = opts.currentVersionId && v.versionId === opts.currentVersionId ? ' (現在)' : ''
+            const ld = v.loaders && v.loaders.length ? (' (' + _mrEsc(v.loaders.join('/')) + ')') : ''
+            return `<option value="${idx}">${_mrEsc(v.versionNumber)}${ld}${cur}</option>`
+        }).join('')
         verSel._matching = matching
+        // Preselect current version if present.
+        if(opts.currentVersionId){
+            const ci = matching.findIndex(v => v.versionId === opts.currentVersionId)
+            if(ci >= 0) verSel.value = String(ci)
+        }
     }
     fillVers()
     mcSel.onchange = fillVers
-    document.getElementById('modpackBackBtn').onclick = () => runModpackSearch()
+    document.getElementById('modpackBackBtn').onclick = () => { if(opts.onBack) opts.onBack(); else runModpackSearch() }
     document.getElementById('modpackImportBtn').onclick = () => {
         const matching = verSel._matching || []
         const chosen = matching[Number(verSel.value)]
-        if(chosen) importModpackVersion(hit, chosen)
+        if(!chosen) return
+        if(opts.onImport) opts.onImport(chosen)
+        else importModpackVersion(hit, chosen)
     }
 }
 
@@ -992,6 +1019,40 @@ async function importModpackVersion(hit, version){
     } catch(err){
         btn.removeAttribute('disabled'); btn.textContent = '再試行'
         setOverlayContent('取り込み失敗', err.message || '不明なエラー', 'OK')
+        setOverlayHandler(null); toggleOverlay(true)
+    }
+}
+
+// Open the version picker for an already-imported modpack instance (update/downgrade).
+function openModpackVersionChange(instanceId){
+    const ins = ConfigManager.getCustomInstance(instanceId)
+    const src = ins && ins.modpackSource
+    if(!src || src.provider !== 'modrinth'){ return }
+    toggleOverlay(true, true, 'modpackContent')
+    openModpackVersions({ projectId: src.projectId, title: ins.name || 'modpack' }, {
+        currentVersionId: src.versionId,
+        importLabel: '適用',
+        onImport: (version) => changeModpackVersion(instanceId, version),
+        onBack: () => { toggleServerSelection(true).then(() => setServerTab('custom')) }
+    })
+}
+
+async function changeModpackVersion(instanceId, version){
+    const btn = document.getElementById('modpackImportBtn')
+    btn.setAttribute('disabled', ''); btn.textContent = '適用中...'
+    try {
+        const res = await window.NLModpack.changeModpackVersion(instanceId, version.file, (i, n) => { btn.textContent = `適用中 ${i}/${n}` })
+        btn.textContent = '完了'
+        if(res.failed && res.failed.length){
+            setOverlayContent('一部のMODを取得できませんでした', res.failed.slice(0, 10).join('\n') + (res.failed.length > 10 ? '\n…' : ''), 'OK')
+            setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) })
+            toggleOverlay(true)
+        } else {
+            await toggleServerSelection(true); setServerTab('custom')
+        }
+    } catch(err){
+        btn.removeAttribute('disabled'); btn.textContent = '再試行'
+        setOverlayContent('変更に失敗しました', err.message || '不明なエラー', 'OK')
         setOverlayHandler(null); toggleOverlay(true)
     }
 }
