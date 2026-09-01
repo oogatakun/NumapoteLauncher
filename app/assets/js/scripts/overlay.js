@@ -557,7 +557,11 @@ function setCustomInstanceHandlers(){
             e.preventDefault()
             const targetCid = row.getAttribute('cid')
             if(_dragCid && targetCid && _dragCid !== targetCid){
-                ConfigManager.moveCustomInstance(_dragCid, targetCid)
+                // Drop on the right half of the target = insert after it (lets a
+                // left-column item move into the right column, and vice versa).
+                const rect = row.getBoundingClientRect()
+                const after = (e.clientX - rect.left) > rect.width / 2
+                ConfigManager.moveCustomInstance(_dragCid, targetCid, after)
                 ConfigManager.save()
                 populateCustomInstanceListings()
             }
