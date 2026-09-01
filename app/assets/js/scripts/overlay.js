@@ -392,7 +392,7 @@ function populateCustomInstanceListings(){
     const instances = ConfigManager.getCustomInstances()
     const selected = ConfigManager.getSelectedServer()
     if(instances.length === 0){
-        el.innerHTML = '<div style="width:100%;text-align:center;opacity:0.7">まだ自作パックがありません</div>'
+        el.innerHTML = '<div style="grid-column:1 / -1;width:100%;text-align:center;opacity:0.7">まだ自作パックがありません</div>'
         return
     }
     let html = ''
