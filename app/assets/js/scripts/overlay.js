@@ -451,12 +451,22 @@ function setCustomInstanceHandlers(){
     })
     // Rename an instance inline
     Array.from(document.getElementsByClassName('customRename')).forEach(b => {
+        // If the row is already being renamed, pressing 改名 again should close (commit) it.
+        // mousedown fires before the input's blur, so remember the edit state here.
+        b.onmousedown = () => {
+            const r = document.querySelector(`.customInstanceListing[cid="${b.getAttribute('cid')}"]`)
+            const ne = r && r.getElementsByClassName('customInstanceName')[0]
+            b._suppress = !!(ne && ne.getElementsByTagName('input').length > 0)
+        }
         b.onclick = (e) => {
             e.stopPropagation()
             const cid = b.getAttribute('cid')
             const row = document.querySelector(`.customInstanceListing[cid="${cid}"]`)
             const nameEl = row && row.getElementsByClassName('customInstanceName')[0]
-            if(!nameEl || nameEl.getElementsByTagName('input').length > 0) return
+            if(!nameEl) return
+            const openInput = nameEl.getElementsByTagName('input')[0]
+            // Already editing (flag from mousedown, or input still open) → commit & close, don't reopen.
+            if(b._suppress || openInput){ b._suppress = false; if(openInput) openInput.blur(); return }
             const cur = nameEl.textContent
             const input = document.createElement('input')
             input.type = 'text'; input.value = cur; input.className = 'customRenameInput'
@@ -1171,7 +1181,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mpInput = document.getElementById('modpackSearchInput')
     if(mpInput) mpInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); runModpackSearch() } })
     const mpCancel = document.getElementById('modpackCancel')
-    if(mpCancel) mpCancel.addEventListener('click', () => toggleOverlay(false))
+    if(mpCancel) mpCancel.addEventListener('click', () => _backToServerCustom())
     const mpToggle = document.getElementById('modpackSourceToggle')
     if(mpToggle){
         Array.from(mpToggle.children).forEach(b => {
@@ -1253,9 +1263,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const cpu = document.getElementById('shareCodeCopyUrl')
     if(cpu) cpu.addEventListener('click', () => { try { require('electron').clipboard.writeText(document.getElementById('shareCodeText').dataset.url || '') } catch(e){ /* ignore */ } })
     const scc = document.getElementById('shareCodeCancel')
-    if(scc) scc.addEventListener('click', () => toggleOverlay(false))
+    if(scc) scc.addEventListener('click', () => _backToServerCustom())
     const sib = document.getElementById('shareImportBtn')
     if(sib) sib.addEventListener('click', () => runShareImport())
     const sic = document.getElementById('shareImportCancel')
-    if(sic) sic.addEventListener('click', () => toggleOverlay(false))
+    if(sic) sic.addEventListener('click', () => _backToServerCustom())
 })
+
+// Return from a custom-tab sub-overlay (modpack/share) back to the 自作 list.
+function _backToServerCustom(){
+    toggleServerSelection(true).then(() => setServerTab('custom'))
+}
