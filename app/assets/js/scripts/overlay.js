@@ -390,6 +390,21 @@ let _dragCid = null
 function populateCustomInstanceListings(){
     const el = document.getElementById('customInstanceListScrollable')
     if(!el) return
+    // Allow wheel scrolling while dragging (native drag suppresses normal scroll).
+    if(!el._dragWheelBound){
+        el._dragWheelBound = true
+        el.addEventListener('wheel', (e) => {
+            if(_dragCid){ el.scrollTop += e.deltaY; e.preventDefault() }
+        }, { passive: false })
+        // Edge auto-scroll while dragging near the top/bottom of the list.
+        el.addEventListener('dragover', (e) => {
+            if(!_dragCid) return
+            const rect = el.getBoundingClientRect()
+            const margin = 40
+            if(e.clientY < rect.top + margin) el.scrollTop -= 14
+            else if(e.clientY > rect.bottom - margin) el.scrollTop += 14
+        })
+    }
     const selected = ConfigManager.getSelectedServer()
     // Favorites pinned on top (stable sort keeps array order within each group).
     const instances = ConfigManager.getCustomInstances().slice().sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0))
