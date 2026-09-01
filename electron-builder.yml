@@ -1,0 +1,53 @@
+appId: 'numapotelauncher'
+productName: 'NumapoteLauncher'
+artifactName: '${productName}-setup-${version}.${ext}'
+
+copyright: 'Copyright © 2018-2024 Daniel Scalzi, 2025 oogata'
+
+asar: true
+compression: 'maximum'
+
+files:
+  - '!{dist,.gitignore,.vscode,docs,dev-app-update.yml,.nvmrc,.eslintrc.json}'
+
+extraResources:
+  - 'libraries'
+
+protocols:
+  - name: 'NumapoteLauncher Protocol'
+    schemes:
+      - 'numapotelauncher'
+
+# Windows Configuration
+win:
+  target:
+    - target: 'nsis'
+      arch: 'x64'
+
+# Windows Installer Configuration
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: true
+
+# macOS Configuration
+mac:
+  target:
+    - target: 'dmg'
+      arch: 'x64'
+  category: 'public.app-category.utilities'
+
+# Linux Configuration
+linux:
+  target: 'AppImage'
+  maintainer: 'oogata'
+  vendor: 'Daniel Scalzi, oogata'
+  synopsis: 'Minecraft Modランチャー'
+  description: 'どんなぽてとでもModが導入できる、そんなランチャーです。'
+  category: 'Game'
+
+directories:
+  buildResources: 'build'
+  output: 'dist'

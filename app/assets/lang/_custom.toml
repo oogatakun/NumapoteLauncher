@@ -1,0 +1,16 @@
+# Custom Language File for Launcher Customizer
+
+[ejs.app]
+title = "🐝🐈沼ぽてランチャー⛄🎃"
+
+[ejs.landing]
+
+[ejs.settings]
+sourceGithubLink = "https://github.com/oogatakun/NumapoteLauncher"
+supportLink = "https://x.com/oogata_kun
+"
+
+[ejs.welcome]
+welcomeHeader = "ようこそ、沼ぽてランチャーランチャーへ"
+welcomeDescription = "どんなぽてとでもModが導入できる、そんなランチャーです。"
+welcomeDescCTA = "数クリックでチャロマーズへ参加する準備が整います。"
