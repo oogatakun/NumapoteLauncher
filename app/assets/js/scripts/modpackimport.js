@@ -79,6 +79,7 @@
     async function _apply(provider, archivePath, instDir, onProgress){
         const managedFiles = []
         const failed = []
+        const blockedManual = []
         fs.ensureDirSync(instDir)
         const zip = new StreamZip.async({ file: archivePath })
         try {
@@ -90,7 +91,12 @@
                     const r = resolved[String(list[i].fileID)]
                     const fileName = r && r.fileName
                     const url = r && r.downloadUrl
-                    if(!fileName || !url){ failed.push(fileName || ('fileID ' + list[i].fileID)); if(typeof onProgress === 'function') onProgress(i + 1, list.length); continue }
+                    if(!fileName){ failed.push('fileID ' + list[i].fileID); if(typeof onProgress === 'function') onProgress(i + 1, list.length); continue }
+                    if(!url){
+                        // Non-distributable: queue for the in-launcher browser download.
+                        blockedManual.push({ modId: list[i].projectID, fileId: list[i].fileID, fileName, fileLength: r.fileLength, md5: r.md5 })
+                        if(typeof onProgress === 'function') onProgress(i + 1, list.length); continue
+                    }
                     const rel = 'mods/' + fileName
                     const dest = path.join(instDir, rel)
                     if(!underDir(instDir, dest)){ failed.push(fileName); continue }
@@ -123,7 +129,32 @@
         } finally {
             await zip.close()
         }
-        return { managedFiles, failed }
+        return { managedFiles, failed, blockedManual }
+    }
+
+    // For CurseForge non-distributable files: resolve mod pages and open the
+    // in-launcher browser windows to download them into mods/. Adds the target
+    // paths to managedFiles (so a later version change removes them).
+    async function _startManualDownloads(instDir, blockedManual, managedFiles){
+        if(!blockedManual || blockedManual.length === 0) return
+        const modIds = Array.from(new Set(blockedManual.map(b => String(b.modId)).filter(Boolean)))
+        let mods = {}
+        try { mods = await window.NLCurseForge.getModsBulk(modIds) } catch(e){ mods = {} }
+        const manualData = []
+        for(const b of blockedManual){
+            const info = mods[String(b.modId)]
+            if(!info || !info.websiteUrl) continue
+            const rel = 'mods/' + b.fileName
+            manualData.push({
+                manual: { name: info.name || b.fileName, url: info.websiteUrl + '/download/' + b.fileId },
+                size: b.fileLength, MD5: b.md5, path: path.join(instDir, rel)
+            })
+            if(!managedFiles.includes(rel)) managedFiles.push(rel)
+        }
+        if(manualData.length){
+            try { require('electron').ipcRenderer.send('openManualWindow', { manualData }) } catch(e){ /* ignore */ }
+        }
+        return manualData.length
     }
 
     async function importModpack(provider, hit, file, onProgress){
@@ -145,9 +176,10 @@
         ConfigManager.save()
         const instDir = path.join(ConfigManager.getInstanceDirectory(), id)
         const applied = await _apply(provider, archivePath, instDir, onProgress)
+        if(provider === 'curseforge'){ await _startManualDownloads(instDir, applied.blockedManual, applied.managedFiles) }
         ConfigManager.updateCustomInstance(id, { managedFiles: applied.managedFiles })
         ConfigManager.save()
-        return { id, name, fileCount: applied.managedFiles.length, failed: applied.failed }
+        return { id, name, fileCount: applied.managedFiles.length, failed: applied.failed, blocked: (applied.blockedManual || []).length }
     }
 
     async function changeModpackVersion(instanceId, file, onProgress){
@@ -164,13 +196,14 @@
             if(underDir(instDir, dest) && fs.existsSync(dest)){ try { fs.removeSync(dest) } catch(e){ /* ignore */ } }
         }
         const applied = await _apply(provider, archivePath, instDir, onProgress)
+        if(provider === 'curseforge'){ await _startManualDownloads(instDir, applied.blockedManual, applied.managedFiles) }
         ConfigManager.updateCustomInstance(instanceId, {
             minecraftVersion: meta.mc, loader: meta.loader, loaderVersion: meta.loaderVersion,
             managedFiles: applied.managedFiles,
             modpackSource: Object.assign({}, ins.modpackSource, { versionId: file.versionId })
         })
         ConfigManager.save()
-        return { id: instanceId, fileCount: applied.managedFiles.length, failed: applied.failed }
+        return { id: instanceId, fileCount: applied.managedFiles.length, failed: applied.failed, blocked: (applied.blockedManual || []).length }
     }
 
     window.NLModpack = { importModpack, changeModpackVersion }

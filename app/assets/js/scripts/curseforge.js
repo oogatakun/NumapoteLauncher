@@ -71,12 +71,24 @@
         return out
     }
 
-    // Resolve CurseForge fileIds to { [fileId]: {fileName, downloadUrl} } in one call.
+    // Resolve CurseForge fileIds to { [fileId]: {fileName, downloadUrl, modId, fileLength, md5} }.
     async function resolveFiles(fileIds){
         if(!fileIds || fileIds.length === 0) return {}
         const body = await postJson('/mods/files', { fileIds: fileIds.map(Number) })
         const map = {}
-        for(const f of (body.data || [])){ map[String(f.id)] = { fileName: f.fileName, downloadUrl: f.downloadUrl || null, modId: f.modId } }
+        for(const f of (body.data || [])){
+            const md5 = ((f.hashes || []).find(h => h.algo === 2) || {}).value || null
+            map[String(f.id)] = { fileName: f.fileName, downloadUrl: f.downloadUrl || null, modId: f.modId, fileLength: f.fileLength, md5 }
+        }
+        return map
+    }
+
+    // Resolve modIds to { [modId]: {name, slug, websiteUrl} } in one call.
+    async function getModsBulk(modIds){
+        if(!modIds || modIds.length === 0) return {}
+        const body = await postJson('/mods', { modIds: modIds.map(Number) })
+        const map = {}
+        for(const m of (body.data || [])){ map[String(m.id)] = { name: m.name, slug: m.slug, websiteUrl: (m.links && m.links.websiteUrl) || '' } }
         return map
     }
 
@@ -160,5 +172,5 @@
         return { files: out, unresolved }
     }
 
-    window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile, searchModpacks, getModpackVersions, resolveFiles, postJson }
+    window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile, searchModpacks, getModpackVersions, resolveFiles, getModsBulk, postJson }
 })()
