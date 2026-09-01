@@ -4805,15 +4805,17 @@ form[name='submitSecretQuestion'] p {
     max-height: 100%;
 }
 #customInstanceListScrollable {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 170px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    max-height: 220px;
     overflow-y: auto;
-    width: 420px;
+    width: 640px;
+    max-width: 90%;
 }
 #customFilterInput {
-    width: 420px;
+    width: 640px;
+    max-width: 90%;
     margin-bottom: 10px;
     background-color: rgba(255, 255, 255, 0.75);
     padding: 6px;
@@ -4822,8 +4824,13 @@ form[name='submitSecretQuestion'] p {
     box-sizing: border-box;
     flex: 0 0 auto;
 }
+#customCreateButtons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 12px;
+}
 #customInstanceCreateButton {
-    margin-top: 10px;
     background: none;
     border: 1px solid #fff;
     color: #fff;
@@ -4834,7 +4841,6 @@ form[name='submitSecretQuestion'] p {
 }
 #customInstanceCreateButton:hover { box-shadow: 0 0 10px 0 #fff; }
 #customModpackButton {
-    margin-top: 8px;
     background: none;
     border: 1px solid #fff;
     color: #fff;
@@ -4858,6 +4864,7 @@ form[name='submitSecretQuestion'] p {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    box-sizing: border-box;
     gap: 8px;
     color: #fff;
     border: 1px solid rgba(126, 126, 126, 0.57);
