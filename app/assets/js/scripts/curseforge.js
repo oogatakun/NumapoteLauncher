@@ -144,7 +144,16 @@
         const list = body.data || []
         if(list.length === 0) return null
         const sorted = list.slice().sort((a, b) => new Date(b.fileDate || 0) - new Date(a.fileDate || 0))
-        return _mapFile(sorted[0])
+        const mapped = _mapFile(sorted[0])
+        // CurseForge uploaders sometimes leave the newest file's dependency list
+        // empty even when the mod still requires them (e.g. Iris omitting Sodium
+        // on its latest build). Borrow deps from the most recent sibling file that
+        // declares any, so required prerequisites still get resolved.
+        if(mapped.dependencies.length === 0){
+            const withDeps = sorted.find(f => Array.isArray(f.dependencies) && f.dependencies.length > 0)
+            if(withDeps) mapped.dependencies = _mapFile(withDeps).dependencies
+        }
+        return mapped
     }
 
     function primaryFile(files){
