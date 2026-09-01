@@ -161,7 +161,7 @@
         return manualData.length
     }
 
-    async function importModpack(provider, hit, file, onProgress, token){
+    async function importModpack(provider, hit, file, onProgress, token, nameOverride){
         const commonDir = ConfigManager.getCommonDirectory()
         if(!file){
             const vers = await _api(provider).getModpackVersions(hit.projectId)
@@ -171,7 +171,7 @@
         const archivePath = await _downloadArchive(file, commonDir)
         const meta = await _readMeta(provider, archivePath)
         const id = genId()
-        const name = meta.name || hit.title || '無題のパック'
+        const name = (nameOverride && nameOverride.trim()) || meta.name || hit.title || '無題のパック'
         ConfigManager.addCustomInstance({
             schema: 1, id, name, minecraftVersion: meta.mc, loader: meta.loader, loaderVersion: meta.loaderVersion,
             created: Date.now(), lastPlayed: null,
