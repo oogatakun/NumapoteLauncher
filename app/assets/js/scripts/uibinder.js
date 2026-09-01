@@ -193,6 +193,22 @@ async function showMainUI(data){
         }, 250)
 
     }, 750)
+
+    // Watchdog: a window resize during startup can stall the jQuery fade
+    // transition, leaving the loading screen up forever. If we're still on the
+    // loading screen after a few seconds, force-complete the transition.
+    setTimeout(() => {
+        const loading = document.getElementById('loadingContainer')
+        if(loading && getComputedStyle(loading).display !== 'none'){
+            try {
+                $(loading).stop(true, true).hide()
+                $('#loadSpinnerImage').removeClass('rotating')
+                const v = currentView || VIEWS.landing
+                $('#main').stop(true, true).show()
+                $(v).stop(true, true).css('opacity', 1).show()
+            } catch(e){ /* ignore */ }
+        }
+    }, 4000)
     // Disable tabbing to the news container.
     // initNews().then(() => {
     //     $('#newsContainer *').attr('tabindex', '-1')
