@@ -390,25 +390,26 @@ let _dragCid = null
 let _grabDX = 0, _grabDY = 0, _dragW = 0, _dragH = 0
 const DROP_OVERLAP = 2 / 3
 // Find the card the dragged ghost overlaps most; only returns a target once the
-// overlap covers at least DROP_OVERLAP of that card. `after` places the dragged
-// item into the target's slot (after it when the drag came from earlier in the
-// list, before it otherwise). `ghost` is the dragged card's current rect.
+// overlap covers at least DROP_OVERLAP of that card. `after` inserts the dragged
+// item into the gap on the side the ghost leans (right of the card's center =
+// after it, left = before it), so it slots between cards rather than swapping.
+// `ghost` is the dragged card's current rect.
 function _dropTarget(ghost){
     const cells = Array.from(document.querySelectorAll('#customInstanceListScrollable .customInstanceListing'))
-    const dragIdx = cells.findIndex(c => c.getAttribute('cid') === _dragCid)
-    let best = null, bestRatio = 0, bestIdx = -1
-    for(let i = 0; i < cells.length; i++){
-        const c = cells[i]
+    let best = null, bestRatio = 0, bestRect = null
+    for(const c of cells){
         if(c.getAttribute('cid') === _dragCid) continue
         const r = c.getBoundingClientRect()
         const ix = Math.max(0, Math.min(ghost.right, r.right) - Math.max(ghost.left, r.left))
         const iy = Math.max(0, Math.min(ghost.bottom, r.bottom) - Math.max(ghost.top, r.top))
         const area = r.width * r.height
         const ratio = area > 0 ? (ix * iy) / area : 0
-        if(ratio > bestRatio){ bestRatio = ratio; best = c; bestIdx = i }
+        if(ratio > bestRatio){ bestRatio = ratio; best = c; bestRect = r }
     }
     if(!best || bestRatio < DROP_OVERLAP) return null
-    return { cid: best.getAttribute('cid'), after: dragIdx >= 0 && dragIdx < bestIdx }
+    const ghostCx = (ghost.left + ghost.right) / 2
+    const targetCx = bestRect.left + bestRect.width / 2
+    return { cid: best.getAttribute('cid'), after: ghostCx > targetCx }
 }
 // Reconstruct the dragged ghost's rect from the pointer and the grab offset.
 function _ghostRect(x, y){
