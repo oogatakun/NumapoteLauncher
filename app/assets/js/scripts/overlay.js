@@ -899,3 +899,68 @@ document.getElementById('windowFilterInput').addEventListener('input', async (e)
 
 
 
+
+// --- Modpack import (Modrinth .mrpack -> custom instance) ---
+async function openModpackSearch(){
+    document.getElementById('modpackSearchInput').value = ''
+    document.getElementById('modpackResults').innerHTML = ''
+    toggleOverlay(true, true, 'modpackContent')
+    runModpackSearch()
+}
+
+async function runModpackSearch(){
+    const q = document.getElementById('modpackSearchInput').value.trim()
+    const results = document.getElementById('modpackResults')
+    results.innerHTML = '<div style="opacity:0.7">検索中...</div>'
+    try {
+        const hits = await window.NLModrinth.searchModpacks(q)
+        if(hits.length === 0){ results.innerHTML = '<div style="opacity:0.7">見つかりませんでした</div>'; return }
+        results.innerHTML = ''
+        for(const h of hits){
+            const row = document.createElement('div')
+            row.className = 'modrinthResult'
+            const icon = h.iconUrl ? `<img src="${_mrEsc(h.iconUrl)}">` : '<img>'
+            row.innerHTML = `${icon}
+                <div class="modrinthResultInfo">
+                    <div class="modrinthResultTitle">${_mrEsc(h.title)}</div>
+                    <div class="modrinthResultMeta">${_mrEsc(h.author)} ・ DL ${Number(h.downloads||0).toLocaleString()}</div>
+                </div>
+                <div class="modrinthActions"><button class="modrinthAddButton" type="button">導入</button></div>`
+            const btn = row.getElementsByClassName('modrinthAddButton')[0]
+            btn.onclick = () => importModpack(h, btn)
+            results.appendChild(row)
+        }
+    } catch(err){
+        results.innerHTML = '<div style="opacity:0.7">' + (err.message || '検索に失敗しました') + '</div>'
+    }
+}
+
+async function importModpack(hit, btn){
+    btn.setAttribute('disabled', ''); btn.textContent = '導入中...'
+    try {
+        const res = await window.NLModpack.importModrinthModpack(hit, (i, n) => { btn.textContent = `導入中 ${i}/${n}` })
+        btn.textContent = '完了'
+        if(res.failed && res.failed.length){
+            setOverlayContent('一部のMODを取得できませんでした', res.failed.slice(0, 10).join('\n') + (res.failed.length > 10 ? '\n…' : ''), 'OK')
+            setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) })
+            toggleOverlay(true)
+        } else {
+            await toggleServerSelection(true); setServerTab('custom')
+        }
+    } catch(err){
+        btn.removeAttribute('disabled'); btn.textContent = '再試行'
+        setOverlayContent('取り込み失敗', err.message || '不明なエラー', 'OK')
+        setOverlayHandler(null); toggleOverlay(true)
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const mpBtn = document.getElementById('customModpackButton')
+    if(mpBtn) mpBtn.addEventListener('click', () => openModpackSearch())
+    const mpSearch = document.getElementById('modpackSearchButton')
+    if(mpSearch) mpSearch.addEventListener('click', () => runModpackSearch())
+    const mpInput = document.getElementById('modpackSearchInput')
+    if(mpInput) mpInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); runModpackSearch() } })
+    const mpCancel = document.getElementById('modpackCancel')
+    if(mpCancel) mpCancel.addEventListener('click', () => toggleOverlay(false))
+})

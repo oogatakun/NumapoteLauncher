@@ -49,6 +49,28 @@
         }
     }
 
+    async function searchModpacks(query, limit = 20){
+        const facets = JSON.stringify([['project_type:modpack']])
+        const url = `${API}/search?query=${encodeURIComponent(query || '')}&limit=${limit}&facets=${encodeURIComponent(facets)}`
+        const body = await getJson(url)
+        return (body.hits || []).map(h => ({
+            projectId: h.project_id, slug: h.slug, title: h.title, author: h.author,
+            description: h.description, iconUrl: h.icon_url, downloads: h.downloads
+        }))
+    }
+
+    async function getModpackFile(projectId){
+        const list = await getJson(`${API}/project/${encodeURIComponent(projectId)}/version`)
+        if(!Array.isArray(list) || list.length === 0) return null
+        const sorted = list.slice().sort((a, b) => new Date(b.date_published || 0) - new Date(a.date_published || 0))
+        for(const v of sorted){
+            const files = v.files || []
+            const primary = files.find(f => f.primary && /\.mrpack$/i.test(f.filename)) || files.find(f => /\.mrpack$/i.test(f.filename))
+            if(primary) return { url: primary.url, filename: primary.filename, versionId: v.id }
+        }
+        return null
+    }
+
     function primaryFile(files){
         if(!files || files.length === 0) return null
         const p = files.find(f => f.primary) || files[0]
@@ -90,5 +112,5 @@
         return { files: out, unresolved }
     }
 
-    window.NLModrinth = { search, getBestVersion, collectRequired }
+    window.NLModrinth = { search, getBestVersion, collectRequired, searchModpacks, getModpackFile }
 })()

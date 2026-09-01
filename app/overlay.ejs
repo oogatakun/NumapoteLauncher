@@ -19,6 +19,7 @@
                     <!-- Custom instances populated here. -->
                 </div>
                 <button id="customInstanceCreateButton" type="button">＋ 新規作成</button>
+                <button id="customModpackButton" type="button">modpackから作成</button>
             </div>
         </div>
         <div id="serverSelectActions">
@@ -53,6 +54,17 @@
         <div id="customCreateActions">
             <button id="customCreateConfirm" type="button">作成</button>
             <button id="customCreateCancel" type="button">キャンセル</button>
+        </div>
+    </div>
+    <div id="modpackContent" style="display: none;">
+        <span id="modpackHeader">modpackから作成</span>
+        <div id="modpackSearchBar">
+            <input type="text" id="modpackSearchInput" placeholder="モッドパックを検索">
+            <button id="modpackSearchButton" type="button">検索</button>
+        </div>
+        <div id="modpackResults"><!-- results here --></div>
+        <div id="modpackActions">
+            <button id="modpackCancel" class="overlayKeybindEsc" type="button">閉じる</button>
         </div>
     </div>
     <div id="windowSelectContent" style="display: none;">
