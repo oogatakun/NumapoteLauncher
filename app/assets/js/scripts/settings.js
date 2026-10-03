@@ -1309,6 +1309,53 @@ settingsMaxRAMRange.onchange = (e) => {
     settingsMaxRAMLabel.innerHTML = sMaxV.toFixed(1) + 'G'
 }
 
+// Parse a stored RAM string (e.g. '4G', '3584M') into a GB number.
+function _ramToGb(s){
+    if(s == null) return null
+    const m = String(s).trim().match(/^([0-9]*\.?[0-9]+)\s*([GgMm])?$/)
+    if(!m) return null
+    let v = parseFloat(m[1])
+    if((m[2] || 'G').toUpperCase() === 'M') v = v / 1024
+    return v
+}
+// Format a GB number into a JVM-valid RAM string. The slider step is 0.5G, but
+// the JVM rejects fractional 'G' (e.g. -Xmx3.5G), so emit 'M' for half steps.
+function _gbToRamStr(gb){
+    const n = Number(gb)
+    return Number.isInteger(n) ? (n + 'G') : (Math.round(n * 1024) + 'M')
+}
+// Initialize the memory sliders from the saved config for the selected server.
+// Must run after bindMinMaxRam (sets slider min/max) and bindRangeSlider.
+function initRamSlidersFromConfig(){
+    const sid = ConfigManager.getSelectedServer()
+    if(!sid) return
+    const clamp = (val, meta) => Math.min(meta.max, Math.max(meta.min, val))
+    let maxV = _ramToGb(ConfigManager.getMaxRAM(sid))
+    let minV = _ramToGb(ConfigManager.getMinRAM(sid))
+    if(maxV != null){
+        const meta = calculateRangeSliderMeta(settingsMaxRAMRange)
+        maxV = clamp(maxV, meta)
+        updateRangedSlider(settingsMaxRAMRange, maxV, ((maxV - meta.min) / meta.step) * meta.inc)
+        settingsMaxRAMLabel.innerHTML = maxV.toFixed(1) + 'G'
+    }
+    if(minV != null){
+        const meta = calculateRangeSliderMeta(settingsMinRAMRange)
+        minV = clamp(minV, meta)
+        updateRangedSlider(settingsMinRAMRange, minV, ((minV - meta.min) / meta.step) * meta.inc)
+        settingsMinRAMLabel.innerHTML = minV.toFixed(1) + 'G'
+    }
+}
+// Persist the memory sliders into config for the selected server. Called from
+// saveSettingsValues() on the settings "Done" action.
+function saveJavaSettings(){
+    const sid = ConfigManager.getSelectedServer()
+    if(!sid) return
+    const minV = Number(settingsMinRAMRange.getAttribute('value'))
+    const maxV = Number(settingsMaxRAMRange.getAttribute('value'))
+    if(!Number.isNaN(maxV)) ConfigManager.setMaxRAM(sid, _gbToRamStr(maxV))
+    if(!Number.isNaN(minV)) ConfigManager.setMinRAM(sid, _gbToRamStr(minV))
+}
+
 /**
  * Calculate common values for a ranged slider.
  *
@@ -1490,6 +1537,7 @@ async function prepareJavaTab(){
     if(!server) return
     bindMinMaxRam(server)
     bindRangeSlider(server)
+    initRamSlidersFromConfig()
     populateMemoryStatus()
     populateJavaReqDesc(server)
     populateJvmOptsLink(server)
