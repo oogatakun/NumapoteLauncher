@@ -593,6 +593,14 @@ async function dlAsync(login = true) {
     toggleLaunchArea(true)
     setLaunchPercentage(0, 100)
 
+    // Mods the user turned off (<name>.jar.disabled) that the distribution ships as File
+    // modules would be re-downloaded by validation. Restore them for the duration of
+    // validation and disable them again before the game starts.
+    const reDisableFileMods = DropinModUtil.suspendDisabledForValidation(
+        collectDistroFileModulePaths(serv.modules),
+        join(ConfigManager.getInstanceDirectory(), serv.rawServer.id, 'mods')
+    )
+
     const fullRepairModule = new FullRepair(
         ConfigManager.getCommonDirectory(),
         ConfigManager.getInstanceDirectory(),
@@ -604,11 +612,13 @@ async function dlAsync(login = true) {
     fullRepairModule.spawnReceiver()
 
     fullRepairModule.childProcess.on('error', (err) => {
+        reDisableFileMods()
         loggerLaunchSuite.error('Error during launch', err)
         showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringLaunchTitle'), err.message || Lang.queryJS('landing.dlAsync.errorDuringLaunchText'), err)
     })
     fullRepairModule.childProcess.on('close', (code, _signal) => {
         if(code !== 0){
+            reDisableFileMods()
             loggerLaunchSuite.error(`Full Repair Module exited with code ${code}, assuming error.`)
             showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringLaunchTitle'), Lang.queryJS('landing.dlAsync.seeConsoleForDetails'))
         }
@@ -624,6 +634,7 @@ async function dlAsync(login = true) {
         setLaunchPercentage(100)
     } catch (err) {
 
+        reDisableFileMods()
         loggerLaunchSuite.error('Error during file validation.')
         showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringFileVerificationTitle'), err.displayable || Lang.queryJS('landing.dlAsync.seeConsoleForDetails'))
         return
@@ -639,6 +650,7 @@ async function dlAsync(login = true) {
             })
             setDownloadPercentage(100)
         } catch(err) {
+            reDisableFileMods()
             loggerLaunchSuite.error('Error during file download.')
             showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringFileDownloadTitle'), err.displayable || Lang.queryJS('landing.dlAsync.seeConsoleForDetails'))
             return
@@ -648,7 +660,13 @@ async function dlAsync(login = true) {
     }
 
     // マニュアルダウンロード判定
-    const manualData = await loadManualData(serv)
+    // (Disabled File mods stay restored while this checks for missing files, then go back to off.)
+    let manualData
+    try {
+        manualData = await loadManualData(serv)
+    } finally {
+        reDisableFileMods()
+    }
 
     if (manualData.length > 0) {
         //マニュアルダウンロード開始
@@ -1280,6 +1298,19 @@ function removeOrderNumber(serverName) {
      * @param {string} server The Server to load Forge data for.
      * @returns {Promise.<Object>} A promise which resolves to Forge's version.json data.
      */
+// Absolute local paths of every distribution module of type File (submodules included).
+function collectDistroFileModulePaths(modules, acc = []) {
+    for(const mdl of (modules || [])) {
+        if(mdl.rawModule && mdl.rawModule.type === 'File') {
+            acc.push(mdl.getPath())
+        }
+        if(mdl.hasSubModules && mdl.hasSubModules()) {
+            collectDistroFileModulePaths(mdl.subModules, acc)
+        }
+    }
+    return acc
+}
+
 function loadManualData(server) {
     return new Promise(async(resolve, reject) => {
         function isModEnabled(modCfg, required = null) {
