@@ -137,6 +137,54 @@ exports.toggleDropinMod = function(modsDir, fullName, enable){
 }
 
 /**
+ * Distribution "File" modules placed under the instance mods folder are validated
+ * by helios-core on every launch, and a missing file is downloaded again. A drop-in
+ * toggle (renaming to .disabled) would therefore be undone at launch. Temporarily
+ * restore the disabled ones so validation passes without a download, and hand back
+ * a function that disables them again once validation/download is finished.
+ *
+ * Only files that are inside modsDir, missing under their normal name, and present
+ * as `<name>.disabled` are touched.
+ *
+ * @param {string[]} filePaths Absolute local paths of the distribution File modules.
+ * @param {string} modsDir The instance mods directory.
+ * @returns {() => void} Re-disables the restored mods. Safe to call more than once.
+ */
+exports.suspendDisabledForValidation = function(filePaths, modsDir){
+    const restored = []
+    const isInside = (p) => {
+        const rel = path.relative(modsDir, p)
+        return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+    }
+    for(const p of (filePaths || [])){
+        const norm = path.normalize(p)
+        if(!isInside(norm)) continue
+        try {
+            if(!fs.existsSync(norm) && fs.existsSync(norm + DISABLED_EXT)){
+                fs.renameSync(norm + DISABLED_EXT, norm)
+                restored.push(norm)
+            }
+        } catch(err){
+            // Leave this one as it is; validation will simply fetch it again.
+        }
+    }
+    let done = false
+    return function reDisable(){
+        if(done) return
+        done = true
+        for(const norm of restored){
+            try {
+                if(fs.existsSync(norm) && !fs.existsSync(norm + DISABLED_EXT)){
+                    fs.renameSync(norm, norm + DISABLED_EXT)
+                }
+            } catch(err){
+                // Ignore; the mod just stays enabled.
+            }
+        }
+    }
+}
+
+/**
  * Check if a drop-in mod is enabled.
  * 
  * @param {string} fullName The fullName of the discovered mod to toggle.
