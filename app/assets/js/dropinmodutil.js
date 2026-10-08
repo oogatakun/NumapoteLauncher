@@ -137,6 +137,26 @@ exports.toggleDropinMod = function(modsDir, fullName, enable){
 }
 
 /**
+ * Absolute local paths of every distribution module of type File (submodules included).
+ * These are the files a server ships into the instance folder (e.g. Nebula's files/mods).
+ *
+ * @param {Array} modules HeliosModule array (server.modules).
+ * @param {string[]} acc Accumulator for the recursion.
+ * @returns {string[]}
+ */
+exports.collectDistroFilePaths = function(modules, acc = []){
+    for(const mdl of (modules || [])){
+        if(mdl.rawModule && mdl.rawModule.type === 'File'){
+            acc.push(mdl.getPath())
+        }
+        if(mdl.hasSubModules && mdl.hasSubModules()){
+            exports.collectDistroFilePaths(mdl.subModules, acc)
+        }
+    }
+    return acc
+}
+
+/**
  * Distribution "File" modules placed under the instance mods folder are validated
  * by helios-core on every launch, and a missing file is downloaded again. A drop-in
  * toggle (renaming to .disabled) would therefore be undone at launch. Temporarily
