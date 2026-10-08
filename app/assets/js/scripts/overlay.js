@@ -992,7 +992,8 @@ function setWindowListingHandlers(){
 
 async function toggleWindowSelection(toggleState){
     const imeBox = document.getElementById('windowImeMode')
-    if(imeBox){ try { imeBox.checked = localStorage.getItem('windowImeMode') === '1' } catch(e) { /* ignore */ } }
+    // On by default; only an explicit earlier opt-out (stored as '0') turns it off.
+    if(imeBox){ try { imeBox.checked = localStorage.getItem('windowImeMode') !== '0' } catch(e) { imeBox.checked = true } }
     await populateWindowListings()
     setWindowListingHandlers()
     toggleOverlay(toggleState, true, 'windowSelectContent')
