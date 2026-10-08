@@ -837,14 +837,20 @@ async function resolveDropinModsForUI(){
     const _distFiles = new Set(DropinModUtil.collectDistroFilePaths(serv.modules)
         .filter(p => { const rel = path.relative(CACHE_SETTINGS_MODS_DIR, p); return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel) })
         .map(p => path.basename(p)))
+    // Mods installed automatically as another mod's required dependency, and mods added from
+    // Modrinth / CurseForge on purpose (any instance).
+    const _manifest = _mrReadManifest({ modsDir: CACHE_SETTINGS_MODS_DIR })
+    const _autoByFile = ModManifestUtil.autoFileMap(_manifest)
+    const _onlineByFile = ModManifestUtil.onlineFileMap(_manifest)
+    // Once anything is labelled, label hand-added jars too so the difference is visible.
     const _showOrigin = !!(_ins && _ins.modpackSource) || _distFiles.size > 0
-    // Mods installed automatically as another mod's required dependency (any instance).
-    const _autoByFile = ModManifestUtil.autoFileMap(_mrReadManifest({ modsDir: CACHE_SETTINGS_MODS_DIR }))
+        || Object.keys(_autoByFile).length > 0 || Object.keys(_onlineByFile).length > 0
 
     for(const dropin of CACHE_DROPIN_MODS){
         const _base = dropin.fullName.replace(/\.disabled$/i, '')
         const _isPack = _showOrigin && _managed.has('mods/' + _base)
         const _auto = _autoByFile[_base]
+        const _online = _onlineByFile[_base]
         let _badge = ''
         if(_isPack){
             _badge = '<span class="modOriginBadge pack">パック</span>'
@@ -852,6 +858,8 @@ async function resolveDropinModsForUI(){
             _badge = '<span class="modOriginBadge dist" title="サーバーが配布したファイルです（削除しても起動時に再取得されます）">配布</span>'
         } else if(_auto){
             _badge = `<span class="modOriginBadge auto" title="${_mrEsc(ModManifestUtil.autoDescription(_auto))}">自動</span>`
+        } else if(_online){
+            _badge = `<span class="modOriginBadge online" title="${_mrEsc(ModManifestUtil.onlineDescription(_online))}">外部</span>`
         } else if(_showOrigin){
             _badge = '<span class="modOriginBadge user">自分</span>'
         }
@@ -2380,7 +2388,8 @@ async function addOnlineMod(hit, ctx, actionsEl, btn, source){
             return
         }
         const res = await installOnlineVersion(ctx, hit, version, source)
-        if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+        // Re-render AND re-attach the remove buttons / toggles (a bare re-render leaves them dead).
+        if(typeof reloadDropinMods === 'function'){ await reloadDropinMods() }
         _mrShowInstallNotes(actionsEl, res)
         renderOnlineActions(actionsEl, hit, ctx, source)
     } catch(err){
@@ -2414,7 +2423,8 @@ async function removeOnlineMod(hit, ctx, actionsEl, entry, btn, source){
         const manifest = _mrReadManifest(ctx)
         delete manifest[_mrKey(source, hit.projectId)]
         _mrWriteManifest(ctx, manifest)
-        if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+        // Re-render AND re-attach the remove buttons / toggles (a bare re-render leaves them dead).
+        if(typeof reloadDropinMods === 'function'){ await reloadDropinMods() }
         renderOnlineActions(actionsEl, hit, ctx, source)
     } catch(err){
         btn.removeAttribute('disabled'); btn.textContent = '再試行'
@@ -2438,7 +2448,8 @@ async function updateOnlineMod(hit, ctx, actionsEl, entry, best, btn, source){
                 : (fsx.existsSync(pth.join(ctx.modsDir, fn + '.disabled')) ? fn + '.disabled' : null)
             if(onDisk){ await DropinModUtil.deleteDropinMod(ctx.modsDir, onDisk) }
         }
-        if(typeof resolveDropinModsForUI === 'function'){ await resolveDropinModsForUI() }
+        // Re-render AND re-attach the remove buttons / toggles (a bare re-render leaves them dead).
+        if(typeof reloadDropinMods === 'function'){ await reloadDropinMods() }
         _mrShowInstallNotes(actionsEl, res)
         renderOnlineActions(actionsEl, hit, ctx, source)
     } catch(err){

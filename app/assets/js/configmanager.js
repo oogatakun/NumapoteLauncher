@@ -2,6 +2,7 @@ const fs   = require('fs-extra')
 const { LoggerUtil } = require('helios-core')
 const os   = require('os')
 const path = require('path')
+const InstanceNaming = require('./instancenamingutil')
 
 const logger = LoggerUtil.getLogger('ConfigManager')
 
@@ -702,6 +703,101 @@ exports.removeCustomInstance = function(id){
     const list = ensureCustomInstances()
     const idx = list.findIndex(x => x.id === id)
     if(idx >= 0) list.splice(idx, 1)
+}
+
+/**
+ * A readable id for a new custom instance, e.g. '自作-FPS Modpack'. The id is also the folder
+ * name under instances/, so an id counts as taken when another custom instance uses it or a
+ * folder with that name already exists (compared case-insensitively, like Windows does).
+ *
+ * @param {string} name The instance's display name.
+ * @param {string} [ownId] The instance's current id when renaming, so it does not clash with itself.
+ * @returns {string}
+ */
+exports.generateCustomInstanceId = function(name, ownId){
+    const used = new Set(ensureCustomInstances().map(x => x && x.id).filter(Boolean).map(s => String(s).toLowerCase()))
+    const own = ownId != null ? String(ownId).toLowerCase() : null
+    const dir = exports.getInstanceDirectory()
+    return InstanceNaming.makeId(name, (id) => {
+        const low = id.toLowerCase()
+        if(own != null && low === own) return false
+        return used.has(low) || fs.existsSync(path.join(dir, id))
+    })
+}
+
+/**
+ * Point every reference to a custom instance at a new id (in memory; call save() afterwards):
+ * the instance itself, the selected server, its Java settings and its mod configuration.
+ *
+ * @param {string} oldId
+ * @param {string} newId
+ */
+exports.changeCustomInstanceId = function(oldId, newId){
+    const ins = exports.getCustomInstance(oldId)
+    if(ins == null) throw new Error('起動構成が見つかりません: ' + oldId)
+    ins.id = newId
+    if(config.selectedServer === oldId) config.selectedServer = newId
+    if(config.javaConfig != null && Object.prototype.hasOwnProperty.call(config.javaConfig, oldId)){
+        config.javaConfig[newId] = config.javaConfig[oldId]
+        delete config.javaConfig[oldId]
+    }
+    for(const m of (config.modConfigurations || [])){
+        if(m != null && m.id === oldId) m.id = newId
+    }
+}
+
+/**
+ * Give a custom instance a new id AND move its folder to match, then save. The folder is moved
+ * first, so if that fails (game running, folder open in Explorer) nothing has changed; if saving
+ * fails afterwards the move is undone.
+ *
+ * @param {string} oldId
+ * @param {string} newId
+ */
+exports.relocateCustomInstance = function(oldId, newId){
+    if(oldId === newId) return
+    if(!InstanceNaming.isSafeId(oldId) || !InstanceNaming.isSafeId(newId)){
+        throw new Error('フォルダ名として使えない名前です')
+    }
+    const base = exports.getInstanceDirectory()
+    const from = path.join(base, oldId)
+    const to = path.join(base, newId)
+    const caseOnly = from.toLowerCase() === to.toLowerCase()
+    if(!caseOnly && fs.existsSync(to)) throw new Error('同じ名前のフォルダが既にあります: ' + newId)
+    const hadDir = fs.existsSync(from)
+    if(hadDir) fs.renameSync(from, to)
+    try {
+        exports.changeCustomInstanceId(oldId, newId)
+        exports.save()
+    } catch(err){
+        try { exports.changeCustomInstanceId(newId, oldId) } catch(e){ /* nothing to undo */ }
+        if(hadDir){ try { fs.renameSync(to, from) } catch(e){ /* leave it where it is */ } }
+        throw err
+    }
+}
+
+/**
+ * Rename instances that still have an old random id (custom-<time>-<random>) to a readable one,
+ * moving their folders. An instance whose folder cannot be moved right now is left as it is and
+ * tried again next start.
+ *
+ * @returns {{from: string, to: string}[]} The instances that were moved.
+ */
+exports.migrateLegacyCustomInstanceIds = function(){
+    const moved = []
+    for(const ins of ensureCustomInstances().slice()){
+        if(ins == null || !InstanceNaming.isLegacyId(ins.id)) continue
+        const to = exports.generateCustomInstanceId(ins.name, ins.id)
+        if(to === ins.id) continue
+        const from = ins.id
+        try {
+            exports.relocateCustomInstance(from, to)
+            moved.push({ from, to })
+        } catch(err){
+            logger.warn(`Could not rename custom instance folder ${from} -> ${to}: ${err.message}`)
+        }
+    }
+    return moved
 }
 
 exports.setSkinOrder = function(skinIds){

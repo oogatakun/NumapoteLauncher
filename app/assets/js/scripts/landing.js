@@ -823,11 +823,25 @@ async function dlAsync(login = true) {
  * Bind functionality to the file system button for the selected
  * server configuration.
  */
+// The selected launch config as { id, name }: an official server from the distribution, or
+// a custom instance (which is not in the distribution). null when nothing usable is selected.
+async function resolveSelectedInstanceInfo() {
+    const id = ConfigManager.getSelectedServer()
+    if(id == null) return null
+    const ins = ConfigManager.getCustomInstance(id)
+    if(ins != null) return { id: ins.id, name: ins.name || '無題の構成' }
+    let distro = null
+    try { distro = await DistroAPI.getDistribution() } catch(err) { distro = null }
+    const serv = distro ? distro.getServerById(id) : null
+    return serv ? { id: serv.rawServer.id, name: removeOrderNumber(serv.rawServer.name) } : null
+}
+
 const _settingsFileSystemButton = document.getElementById('settingsFileSystemButton')
 if (_settingsFileSystemButton) {
     _settingsFileSystemButton.onclick = async () => {
-        const serv = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
-        const CACHE_SETTINGS_MODS_DIR = path.join(ConfigManager.getInstanceDirectory(), serv.rawServer.id)
+        const info = await resolveSelectedInstanceInfo()
+        if(info == null) return
+        const CACHE_SETTINGS_MODS_DIR = path.join(ConfigManager.getInstanceDirectory(), info.id)
         DropinModUtil.validateDir(CACHE_SETTINGS_MODS_DIR)
         shell.openPath(CACHE_SETTINGS_MODS_DIR)
     }
@@ -839,12 +853,13 @@ if (_settingsFileSystemButton) {
 const _deleteFileSystemSVG = document.getElementById('deleteFileSystemSVG')
 if (_deleteFileSystemSVG) {
     _deleteFileSystemSVG.onclick = async () => {
-        const serv = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
-        const CACHE_SETTINGS_MODS_DIR = path.join(ConfigManager.getInstanceDirectory(), serv.rawServer.id)
+        const info = await resolveSelectedInstanceInfo()
+        if(info == null) return
+        const CACHE_SETTINGS_MODS_DIR = path.join(ConfigManager.getInstanceDirectory(), info.id)
 
         setOverlayContent(
             'フォルダを削除しますか?',
-            `${removeOrderNumber(serv.rawServer.name)}の関連フォルダを削除します。ドロップインMODやスクリーンショットも削除されます。この操作は元に戻せません。`,
+            `${info.name}の関連フォルダを削除します。ドロップインMODやスクリーンショットも削除されます。この操作は元に戻せません。`,
             'キャンセル',
             '削除する'
         )

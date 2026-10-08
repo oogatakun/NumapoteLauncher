@@ -11,7 +11,6 @@
 
     function underDir(base, p){ return path.normalize(p).startsWith(path.normalize(base)) }
     function safeSlug(s){ return String(s || 'pack').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60) }
-    function genId(){ return 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8) }
     function _api(provider){ return provider === 'curseforge' ? window.NLCurseForge : window.NLModrinth }
 
     async function _downloadArchive(file, commonDir){
@@ -170,8 +169,8 @@
         if(!file) throw new Error('このパックにダウンロード可能なファイルが見つかりません')
         const archivePath = await _downloadArchive(file, commonDir)
         const meta = await _readMeta(provider, archivePath)
-        const id = genId()
         const name = (nameOverride && nameOverride.trim()) || meta.name || hit.title || '無題のパック'
+        const id = ConfigManager.generateCustomInstanceId(name)
         ConfigManager.addCustomInstance({
             schema: 1, id, name, minecraftVersion: meta.mc, loader: meta.loader, loaderVersion: meta.loaderVersion,
             created: Date.now(), lastPlayed: null,

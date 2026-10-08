@@ -115,7 +115,7 @@
             id = res.id
             for(const f of (res.failed || [])) failed.push(f)
         } else {
-            id = 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
+            id = ConfigManager.generateCustomInstanceId(payload.name || '共有構成')
             ConfigManager.addCustomInstance({ schema: 1, id, name: payload.name || '共有構成', minecraftVersion: payload.mc, loader: payload.loader, loaderVersion: payload.loaderVersion || '', created: Date.now(), lastPlayed: null })
             ConfigManager.save()
         }
