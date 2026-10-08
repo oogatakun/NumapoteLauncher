@@ -991,6 +991,8 @@ function setWindowListingHandlers(){
 }
 
 async function toggleWindowSelection(toggleState){
+    const imeBox = document.getElementById('windowImeMode')
+    if(imeBox){ try { imeBox.checked = localStorage.getItem('windowImeMode') === '1' } catch(e) { /* ignore */ } }
     await populateWindowListings()
     setWindowListingHandlers()
     toggleOverlay(toggleState, true, 'windowSelectContent')
@@ -1015,8 +1017,12 @@ async function applyWindowMode(mode){
         return
     }
     let error = null
+    // Experimental: 1px taller than the screen (see apply-window-mode in index.js). Remembered.
+    const imeBox = document.getElementById('windowImeMode')
+    const imeMode = !!(imeBox && imeBox.checked)
+    try { localStorage.setItem('windowImeMode', imeMode ? '1' : '0') } catch(e) { /* ignore */ }
     try {
-        const res = await _ipc.invoke('apply-window-mode', hwnd, mode)
+        const res = await _ipc.invoke('apply-window-mode', hwnd, mode, { imeMode })
         if(!(res && res.success)){
             error = res && res.message ? res.message : '操作に失敗しました。'
         }

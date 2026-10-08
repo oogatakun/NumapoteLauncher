@@ -453,7 +453,7 @@ ipcMain.handle('list-windows', async (event) => {
 // Store original window rect/style so 最小化(restore) can revert exactly.
 const originalWindowRects = new Map()
 
-ipcMain.handle('apply-window-mode', async (event, handleStr, mode) => {
+ipcMain.handle('apply-window-mode', async (event, handleStr, mode, opts) => {
     if (process.platform !== 'win32') {
         return { success: false, message: 'Not implemented on this OS' }
     }
@@ -512,7 +512,11 @@ ipcMain.handle('apply-window-mode', async (event, handleStr, mode) => {
             const mTop = mi.readInt32LE(8)
             const mRight = mi.readInt32LE(12)
             const mBottom = mi.readInt32LE(16)
-            SetWindowPos(hwnd, 0, mLeft, mTop, mRight - mLeft, mBottom - mTop, SWP_NOZORDER | SWP_FRAMECHANGED)
+            // Optional "IME mode": 1px taller than the monitor. The window still covers the whole
+            // monitor (the taskbar stays hidden) but its size no longer equals the display mode, which
+            // keeps Windows from presenting it directly and hiding other windows (IME candidates).
+            const extraHeight = (opts && opts.imeMode) ? 1 : 0
+            SetWindowPos(hwnd, 0, mLeft, mTop, mRight - mLeft, (mBottom - mTop) + extraHeight, SWP_NOZORDER | SWP_FRAMECHANGED)
             return { success: true }
         } else if (mode === 'restore') {
             const saved = originalWindowRects.get(hwnd)
