@@ -17,6 +17,15 @@ logger.info('Loading..')
 // Load ConfigManager
 ConfigManager.load()
 
+// Custom instances from before readable folder names: rename custom-<random> ids/folders to
+// their name. Anything that cannot be moved right now is retried on the next start.
+try {
+    const moved = ConfigManager.migrateLegacyCustomInstanceIds()
+    if(moved.length > 0) logger.info(`Renamed ${moved.length} custom instance folder(s): ` + moved.map(m => `${m.from} -> ${m.to}`).join(', '))
+} catch(err) {
+    logger.warn('Custom instance folder migration failed', err)
+}
+
 // Yuck!
 // TODO Fix this
 DistroAPI['commonDir'] = ConfigManager.getCommonDirectory()
@@ -32,8 +41,11 @@ LangLoader.setupLanguage()
 function onDistroLoad(data){
     if(data != null){
         
-        // Resolve the selected server if its value has yet to be set.
-        if(ConfigManager.getSelectedServer() == null || data.getServerById(ConfigManager.getSelectedServer()) == null){
+        // Resolve the selected server if its value has yet to be set. A selected custom
+        // instance is not part of the distribution, so it must be left alone.
+        const selId = ConfigManager.getSelectedServer()
+        const selIsCustom = selId != null && ConfigManager.getCustomInstance(selId) != null
+        if(!selIsCustom && (selId == null || data.getServerById(selId) == null)){
             logger.info('Determining default selected server..')
             ConfigManager.setSelectedServer(data.getMainServer().rawServer.id)
             ConfigManager.save()

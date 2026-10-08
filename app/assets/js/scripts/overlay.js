@@ -560,9 +560,23 @@ function setCustomInstanceHandlers(){
                 if(save && val && val !== cur){
                     ConfigManager.updateCustomInstance(cid, { name: val }); ConfigManager.save()
                     nameEl.textContent = val
-                    if(ConfigManager.getSelectedServer() === cid){
+                    // Keep the folder name in step with the new name (this also re-points the
+                    // selection, Java settings and mod configuration at the new id).
+                    const wasSelected = ConfigManager.getSelectedServer() === cid
+                    let moveError = null
+                    try {
+                        const wanted = ConfigManager.generateCustomInstanceId(val, cid)
+                        if(wanted !== cid) ConfigManager.relocateCustomInstance(cid, wanted)
+                    } catch(err){ moveError = err }
+                    if(wasSelected){
                         const sb = document.getElementById('server_selection_button')
                         if(sb) sb.innerHTML = '&#8226; ' + val
+                    }
+                    populateCustomInstanceListings()
+                    if(moveError){
+                        setOverlayContent('フォルダ名は変更できませんでした', '名前は変更しましたが、フォルダが使用中のため、フォルダ名は元のままです。ゲームを終了し、エクスプローラーで開いていれば閉じてから、もう一度名前を変更してください。', 'OK')
+                        setOverlayHandler(null)
+                        toggleOverlay(true)
                     }
                 } else {
                     nameEl.textContent = cur
@@ -736,10 +750,6 @@ async function openCustomInstanceCreate(){
     if(mcEl2) mcEl2.onchange = () => { if(loaderEl && (loaderEl.value === 'fabric' || loaderEl.value === 'forge')) refreshLoaderVersions() }
 }
 
-function _genInstanceId(){
-    return 'custom-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)
-}
-
 document.getElementById('customCreateConfirm').addEventListener('click', () => {
     const name = (document.getElementById('customCreateName').value || '').trim() || '無題の構成'
     const mc = document.getElementById('customCreateMcVersion').value
@@ -760,7 +770,7 @@ document.getElementById('customCreateConfirm').addEventListener('click', () => {
     }
     const instance = {
         schema: 1,
-        id: _genInstanceId(),
+        id: ConfigManager.generateCustomInstanceId(name),
         name,
         minecraftVersion: mc,
         loader,

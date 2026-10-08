@@ -84,6 +84,32 @@ exports.autoFileMap = function(manifest){
 }
 
 /**
+ * Mods the user added from Modrinth / CurseForge on purpose (not as someone's dependency).
+ * Entries without a versionId are guesses made by the search UI for jars that were already on
+ * disk, so they are not counted.
+ *
+ * @param {Object} manifest
+ * @returns {Object<string, Object>} Map of file name -> manifest entry.
+ */
+exports.onlineFileMap = function(manifest){
+    const map = {}
+    for(const k of Object.keys(manifest || {})){
+        const e = manifest[k]
+        if(e && !e.auto && e.versionId){ for(const f of (e.files || [])){ map[f] = e } }
+    }
+    return map
+}
+
+/**
+ * @param {Object} entry An online-added manifest entry.
+ * @returns {string} Plain text for the badge tooltip (not HTML-escaped).
+ */
+exports.onlineDescription = function(entry){
+    const site = entry && entry.source === 'curseforge' ? 'CurseForge' : 'Modrinth'
+    return site + 'から追加'
+}
+
+/**
  * @param {Object} entry An `auto` manifest entry.
  * @returns {string} Plain text for the badge tooltip (not HTML-escaped).
  */
