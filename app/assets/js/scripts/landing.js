@@ -597,7 +597,7 @@ async function dlAsync(login = true) {
     // modules would be re-downloaded by validation. Restore them for the duration of
     // validation and disable them again before the game starts.
     const reDisableFileMods = DropinModUtil.suspendDisabledForValidation(
-        collectDistroFileModulePaths(serv.modules),
+        DropinModUtil.collectDistroFilePaths(serv.modules),
         join(ConfigManager.getInstanceDirectory(), serv.rawServer.id, 'mods')
     )
 
@@ -1298,19 +1298,6 @@ function removeOrderNumber(serverName) {
      * @param {string} server The Server to load Forge data for.
      * @returns {Promise.<Object>} A promise which resolves to Forge's version.json data.
      */
-// Absolute local paths of every distribution module of type File (submodules included).
-function collectDistroFileModulePaths(modules, acc = []) {
-    for(const mdl of (modules || [])) {
-        if(mdl.rawModule && mdl.rawModule.type === 'File') {
-            acc.push(mdl.getPath())
-        }
-        if(mdl.hasSubModules && mdl.hasSubModules()) {
-            collectDistroFileModulePaths(mdl.subModules, acc)
-        }
-    }
-    return acc
-}
-
 function loadManualData(server) {
     return new Promise(async(resolve, reject) => {
         function isModEnabled(modCfg, required = null) {

@@ -831,8 +831,13 @@ async function resolveDropinModsForUI(){
     // Distinguish pack-managed mods from user-added ones (modpack instances only).
     const _selId = serv.rawServer.id
     const _ins = ConfigManager.getCustomInstance(_selId)
-    const _showOrigin = !!(_ins && _ins.modpackSource)
     const _managed = new Set((_ins && _ins.managedFiles) || [])
+    // Jars the server itself ships into mods/ (e.g. Nebula's files/mods) look just like jars
+    // dropped in by hand, so tell them apart.
+    const _distFiles = new Set(DropinModUtil.collectDistroFilePaths(serv.modules)
+        .filter(p => { const rel = path.relative(CACHE_SETTINGS_MODS_DIR, p); return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel) })
+        .map(p => path.basename(p)))
+    const _showOrigin = !!(_ins && _ins.modpackSource) || _distFiles.size > 0
     // Mods installed automatically as another mod's required dependency (any instance).
     const _autoByFile = ModManifestUtil.autoFileMap(_mrReadManifest({ modsDir: CACHE_SETTINGS_MODS_DIR }))
 
@@ -843,6 +848,8 @@ async function resolveDropinModsForUI(){
         let _badge = ''
         if(_isPack){
             _badge = '<span class="modOriginBadge pack">パック</span>'
+        } else if(_distFiles.has(_base)){
+            _badge = '<span class="modOriginBadge dist" title="サーバーが配布したファイルです（削除しても起動時に再取得されます）">配布</span>'
         } else if(_auto){
             _badge = `<span class="modOriginBadge auto" title="${_mrEsc(ModManifestUtil.autoDescription(_auto))}">自動</span>`
         } else if(_showOrigin){
