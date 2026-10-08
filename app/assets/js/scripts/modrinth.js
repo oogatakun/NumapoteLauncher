@@ -42,6 +42,7 @@
         const v = sorted[0]
         return {
             versionId: v.id,
+            projectId: v.project_id || String(projectId),
             versionNumber: v.version_number,
             datePublished: v.date_published,
             files: v.files || [],
@@ -63,7 +64,7 @@
         let v
         try { v = await getJson(`${API}/version/${encodeURIComponent(versionId)}`) } catch(e) { return null }
         if(!v || !v.id) return null
-        return { versionId: v.id, versionNumber: v.version_number, datePublished: v.date_published, files: v.files || [], dependencies: v.dependencies || [] }
+        return { versionId: v.id, projectId: v.project_id || null, versionNumber: v.version_number, datePublished: v.date_published, files: v.files || [], dependencies: v.dependencies || [] }
     }
 
     // All importable versions of a modpack (those that ship a .mrpack), newest first.
@@ -93,14 +94,20 @@
     }
 
     // Collect the mod + its required dependencies (recursive, deduped).
-    // Returns { files, unresolved } where unresolved lists required deps that
+    // Returns { files, unresolved, deps }. `unresolved` lists required deps that
     // have no compatible version (or failed to fetch) so the caller can warn.
-    async function collectRequired(version, mc, loader){
+    // `deps` describes each dependency (not the mod itself): { projectId, versionId,
+    // versionNumber, datePublished, filename, url, requiredBy: [projectId] } so the
+    // caller can record which mods were installed automatically. `rootProjectId` is the
+    // project of `version` (used as the "required by" of its direct dependencies).
+    async function collectRequired(version, mc, loader, rootProjectId){
         const out = []
         const unresolved = []
         const seenFiles = new Set()
         const seenVer = new Set()
-        async function walk(ver){
+        const depMap = new Map()
+        const rootId = rootProjectId != null ? String(rootProjectId) : (version.projectId ? String(version.projectId) : null)
+        async function walk(ver, selfId){
             const key = ver.versionId || ver.id
             if(key){ if(seenVer.has(key)) return; seenVer.add(key) }
             const pf = primaryFile(ver.files)
@@ -114,17 +121,30 @@
                 try {
                     if(dep.version_id){
                         const dv = await getJson(`${API}/version/${encodeURIComponent(dep.version_id)}`)
-                        depVer = dv ? { versionId: dv.id, files: dv.files || [], dependencies: dv.dependencies || [] } : null
+                        depVer = dv ? { versionId: dv.id, projectId: dv.project_id || null, versionNumber: dv.version_number, datePublished: dv.date_published, files: dv.files || [], dependencies: dv.dependencies || [] } : null
                     } else if(dep.project_id){
                         depVer = await getBestVersion(dep.project_id, mc, loader)
                     }
                 } catch(e){ depVer = null }
-                if(depVer) await walk(depVer)
-                else unresolved.push(dep.project_id || dep.version_id || '?')
+                if(depVer){
+                    const depId = String(depVer.projectId || dep.project_id || '')
+                    if(depId){
+                        const dpf = primaryFile(depVer.files)
+                        let d = depMap.get(depId)
+                        if(!d){
+                            d = { projectId: depId, versionId: depVer.versionId || null, versionNumber: depVer.versionNumber || null, datePublished: depVer.datePublished || null, filename: dpf ? dpf.filename : null, url: dpf ? dpf.url : null, requiredBy: [] }
+                            depMap.set(depId, d)
+                        }
+                        if(selfId && !d.requiredBy.includes(selfId)) d.requiredBy.push(selfId)
+                    }
+                    await walk(depVer, depId || null)
+                } else {
+                    unresolved.push(dep.project_id || dep.version_id || '?')
+                }
             }
         }
-        await walk(version)
-        return { files: out, unresolved }
+        await walk(version, rootId)
+        return { files: out, unresolved, deps: Array.from(depMap.values()) }
     }
 
     window.NLModrinth = { search, getBestVersion, getVersionById, collectRequired, searchModpacks, getModpackVersions }

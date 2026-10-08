@@ -3,6 +3,7 @@ const os     = require('os')
 const semver = require('semver')
 
 const DropinModUtil  = require('./assets/js/dropinmodutil')
+const ModManifestUtil = require('./assets/js/modmanifestutil')
 const { MSFT_OPCODE, MSFT_REPLY_TYPE, MSFT_ERROR } = require('./assets/js/ipcconstants')
 const ServerOptionQuery = require('./assets/js/scripts/serverOptionQuery')
 
@@ -832,11 +833,21 @@ async function resolveDropinModsForUI(){
     const _ins = ConfigManager.getCustomInstance(_selId)
     const _showOrigin = !!(_ins && _ins.modpackSource)
     const _managed = new Set((_ins && _ins.managedFiles) || [])
+    // Mods installed automatically as another mod's required dependency (any instance).
+    const _autoByFile = ModManifestUtil.autoFileMap(_mrReadManifest({ modsDir: CACHE_SETTINGS_MODS_DIR }))
 
     for(const dropin of CACHE_DROPIN_MODS){
         const _base = dropin.fullName.replace(/\.disabled$/i, '')
-        const _isPack = _managed.has('mods/' + _base)
-        const _badge = _showOrigin ? `<span class="modOriginBadge ${_isPack ? 'pack' : 'user'}">${_isPack ? 'パック' : '自分'}</span>` : ''
+        const _isPack = _showOrigin && _managed.has('mods/' + _base)
+        const _auto = _autoByFile[_base]
+        let _badge = ''
+        if(_isPack){
+            _badge = '<span class="modOriginBadge pack">パック</span>'
+        } else if(_auto){
+            _badge = `<span class="modOriginBadge auto" title="${_mrEsc(ModManifestUtil.autoDescription(_auto))}">自動</span>`
+        } else if(_showOrigin){
+            _badge = '<span class="modOriginBadge user">自分</span>'
+        }
         dropinMods += `<div id="${dropin.fullName}" class="settingsBaseMod settingsDropinMod" ${!dropin.disabled ? 'enabled' : ''}>
                     <div class="settingsModContent">
                         <div class="settingsModMainWrapper">
@@ -2159,8 +2170,10 @@ let currentModSource = 'modrinth'
 // --- Installed-mod manifest (per instance) -------------------------------
 // Records which Modrinth projects were installed into this pack so the search
 // UI can offer 削除/更新 instead of 追加. Stored next to the mods folder as
-// instances/<id>/.numapote-mods.json, keyed by projectId. Only the mod's own
-// file is tracked (not its dependencies) so removal never breaks other mods.
+// instances/<id>/.numapote-mods.json, keyed by projectId. A mod's own entry tracks
+// only its own file, so removing it never deletes another mod. Required dependencies
+// that were installed automatically get their own entry flagged `auto: true` (with
+// `requiredBy`) so the Mod tab can label them; see modmanifestutil.js.
 
 function _mrManifestPath(ctx){
     const pth = require('path')
@@ -2294,29 +2307,42 @@ function renderOnlineActions(actionsEl, hit, ctx, source){
 }
 
 // Download the resolved version (mod + required deps) into the mods folder and
-// record the mod's own file. Files with url:null (non-distributable) are skipped
-// and their names returned so the caller can warn the user.
-async function installOnlineVersion(ctx, hit, version, source){
+// record the mod's own file, plus any dependency we downloaded as an `auto` entry.
+// Files with url:null (non-distributable) are skipped and their names returned so
+// the caller can warn the user. With opts.preserveAuto (an update of a mod that was
+// itself installed as a dependency) the mod keeps its `auto` label.
+async function installOnlineVersion(ctx, hit, version, source, opts){
+    opts = opts || {}
     const { downloadFile } = require('helios-core/dl')
     const fsx = require('fs-extra'); const pth = require('path')
-    const resolved = await _mrApi(source).collectRequired(version, ctx.mc, ctx.loader)
+    const resolved = await _mrApi(source).collectRequired(version, ctx.mc, ctx.loader, hit.projectId)
     const files = resolved.files || []
     const unresolved = resolved.unresolved || []
     fsx.ensureDirSync(ctx.modsDir)
     const blockedNames = []
+    const downloaded = new Set()
     for(const f of files){
         if(!f.url){ blockedNames.push(f.filename); continue }
         const dest = pth.join(ctx.modsDir, f.filename)
-        if(!fsx.existsSync(dest) && !fsx.existsSync(dest + '.disabled')){ await downloadFile(f.url, dest) }
+        if(!fsx.existsSync(dest) && !fsx.existsSync(dest + '.disabled')){
+            await downloadFile(f.url, dest)
+            downloaded.add(f.filename)
+        }
     }
     // files[0] is the mod itself (collectRequired walks it first).
     if(files.length > 0 && files[0].url){
         const manifest = _mrReadManifest(ctx)
-        manifest[_mrKey(source, hit.projectId)] = {
+        const key = _mrKey(source, hit.projectId)
+        const prev = manifest[key]
+        const entry = {
             source, slug: hit.slug, title: hit.title,
             versionId: version.versionId, versionNumber: version.versionNumber,
             datePublished: version.datePublished, files: [files[0].filename]
         }
+        // Adding a mod yourself takes ownership of it; an update leaves the label as it was.
+        if(opts.preserveAuto && prev && prev.auto){ entry.auto = true; entry.requiredBy = prev.requiredBy }
+        manifest[key] = entry
+        ModManifestUtil.recordAutoDeps(manifest, resolved.deps, source, hit.projectId, hit.title || hit.slug || hit.projectId, downloaded)
         _mrWriteManifest(ctx, manifest)
     }
     return { blockedNames, unresolved }
@@ -2395,7 +2421,7 @@ async function updateOnlineMod(hit, ctx, actionsEl, entry, best, btn, source){
     try {
         // Install the new version first, then drop the old file if its name changed.
         const oldFiles = (entry.files || []).slice()
-        const res = await installOnlineVersion(ctx, hit, best, source)
+        const res = await installOnlineVersion(ctx, hit, best, source, { preserveAuto: true })
         const newManifest = _mrReadManifest(ctx)
         const nk = _mrKey(source, hit.projectId)
         const newFiles = (newManifest[nk] && newManifest[nk].files) || []

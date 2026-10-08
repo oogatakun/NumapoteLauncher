@@ -9,6 +9,7 @@
     const { downloadFile } = require('helios-core/dl')
     const ConfigManager = require('./assets/js/configmanager')
     const DropinModUtil = require('./assets/js/dropinmodutil')
+    const ManifestUtil = require('./assets/js/modmanifestutil')
 
     const PREFIX = 'NLPACK1'
 
@@ -67,6 +68,9 @@
             const files = e.files || []
             // Skip mods that are part of the pack (managed) — they come from re-import.
             if(files.some(f => managed.has('mods/' + f))) continue
+            // Skip mods that were only installed as another mod's dependency — the
+            // receiver gets them back when it resolves that mod's required deps.
+            if(e.auto) continue
             const source = e.source || 'modrinth'
             const projectId = key.indexOf('cf:') === 0 ? key.slice(3) : key
             mods.push({ source, projectId, versionId: e.versionId || null, slug: e.slug || null })
@@ -129,19 +133,22 @@
             if(!version){ try { version = await api.getBestVersion(m.projectId, payload.mc, payload.loader) } catch(e){ version = null } }
             if(!version){ failed.push(m.slug || m.projectId); if(typeof onProgress === 'function') onProgress(i + 1, mods.length); continue }
             let ownFile = null
+            let resolved = null
+            const downloaded = new Set()
             try {
-                const resolved = await api.collectRequired(version, payload.mc, payload.loader)
+                resolved = await api.collectRequired(version, payload.mc, payload.loader, m.projectId)
                 const files = resolved.files || []
                 for(const f of files){
                     if(!f.url) continue
                     const dest = path.join(modsDir, f.filename)
                     if(!underDir(modsDir, dest)) continue
-                    if(!fs.existsSync(dest)){ await downloadFile(f.url, dest) }
+                    if(!fs.existsSync(dest)){ await downloadFile(f.url, dest); downloaded.add(f.filename) }
                 }
                 if(files.length && files[0].url) ownFile = files[0].filename
             } catch(e){ failed.push(m.slug || m.projectId); if(typeof onProgress === 'function') onProgress(i + 1, mods.length); continue }
             if(ownFile){
                 manifest[_mkKey(m.source, m.projectId)] = { source: m.source, slug: m.slug, title: m.slug, versionId: version.versionId, versionNumber: version.versionNumber, datePublished: version.datePublished, files: [ownFile] }
+                ManifestUtil.recordAutoDeps(manifest, resolved && resolved.deps, m.source, m.projectId, m.slug || m.projectId, downloaded)
             }
             if(typeof onProgress === 'function') onProgress(i + 1, mods.length)
         }
