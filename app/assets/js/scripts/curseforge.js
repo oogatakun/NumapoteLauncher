@@ -115,6 +115,7 @@
     function _mapFile(f){
         return {
             versionId: String(f.id),
+            projectId: f.modId != null ? String(f.modId) : null,
             versionNumber: f.displayName || f.fileName,
             datePublished: f.fileDate,
             files: [{ filename: f.fileName, url: f.downloadUrl || null }],
@@ -145,6 +146,7 @@
         if(list.length === 0) return null
         const sorted = list.slice().sort((a, b) => new Date(b.fileDate || 0) - new Date(a.fileDate || 0))
         const mapped = _mapFile(sorted[0])
+        mapped.projectId = String(projectId)
         // CurseForge uploaders sometimes leave the newest file's dependency list
         // empty even when the mod still requires them (e.g. Iris omitting Sodium
         // on its latest build). Borrow deps from the most recent sibling file that
@@ -164,14 +166,20 @@
 
     // Collect the mod + its required dependencies (recursive, deduped).
     // A dependency whose file is non-distributable comes back with url:null.
-    // Returns { files, unresolved } where unresolved lists required deps that
+    // Returns { files, unresolved, deps }. `unresolved` lists required deps that
     // have no compatible version (or failed to fetch) so the caller can warn.
-    async function collectRequired(version, mc, loader){
+    // `deps` describes each dependency (not the mod itself): { projectId, versionId,
+    // versionNumber, datePublished, filename, url, requiredBy: [projectId] } so the
+    // caller can record which mods were installed automatically. `rootProjectId` is the
+    // project of `version` (used as the "required by" of its direct dependencies).
+    async function collectRequired(version, mc, loader, rootProjectId){
         const out = []
         const unresolved = []
         const seenFiles = new Set()
         const seenVer = new Set()
-        async function walk(ver){
+        const depMap = new Map()
+        const rootId = rootProjectId != null ? String(rootProjectId) : (version.projectId ? String(version.projectId) : null)
+        async function walk(ver, selfId){
             const key = ver.versionId
             if(key){ if(seenVer.has(key)) return; seenVer.add(key) }
             const pf = primaryFile(ver.files)
@@ -180,12 +188,25 @@
                 if(dep.dependency_type !== 'required') continue
                 let depVer = null
                 try { depVer = await getBestVersion(dep.project_id, mc, loader) } catch(e){ depVer = null }
-                if(depVer) await walk(depVer)
-                else unresolved.push(dep.project_id || '?')
+                if(depVer){
+                    const depId = String(depVer.projectId || dep.project_id || '')
+                    if(depId){
+                        const dpf = primaryFile(depVer.files)
+                        let d = depMap.get(depId)
+                        if(!d){
+                            d = { projectId: depId, versionId: depVer.versionId || null, versionNumber: depVer.versionNumber || null, datePublished: depVer.datePublished || null, filename: dpf ? dpf.filename : null, url: dpf ? dpf.url : null, requiredBy: [] }
+                            depMap.set(depId, d)
+                        }
+                        if(selfId && !d.requiredBy.includes(selfId)) d.requiredBy.push(selfId)
+                    }
+                    await walk(depVer, depId || null)
+                } else {
+                    unresolved.push(dep.project_id || '?')
+                }
             }
         }
-        await walk(version)
-        return { files: out, unresolved }
+        await walk(version, rootId)
+        return { files: out, unresolved, deps: Array.from(depMap.values()) }
     }
 
     window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile, searchModpacks, getModpackVersions, resolveFiles, getModsBulk, getVersionById, postJson }
