@@ -5438,6 +5438,18 @@ form[name='submitSecretQuestion'] p {
     display: flex;
     gap: 12px;
 }
+/* Experimental option: make the borderless window 1px taller than the screen. */
+#windowImeModeLabel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.85);
+    cursor: pointer;
+    user-select: none;
+}
+#windowImeModeLabel input { cursor: pointer; }
 #windowMaximizeButton,
 #windowMinimizeButton {
     background: none;
