@@ -827,11 +827,52 @@ function getOrCreateJavaConfig(serverid){
         config.javaConfig = {}
     }
     if(!Object.prototype.hasOwnProperty.call(config.javaConfig, serverid)){
-        // Fallback to a conservative default (Java 8 style) when we don't
-        // have effectiveJavaOptions available at call site.
-        config.javaConfig[serverid] = defaultJavaConfig8(null)
+        // A custom instance knows its Minecraft version, so give it defaults that suit the Java it
+        // will run on (the Java 8 CMS flags make a modern JVM refuse to start). Everything else
+        // falls back to the conservative Java 8 style, as before.
+        const ins = exports.getCustomInstance(serverid)
+        config.javaConfig[serverid] = ins != null
+            ? defaultJavaConfig({ suggestedMajor: javaMajorForMinecraft(ins.minecraftVersion) }, null)
+            : defaultJavaConfig8(null)
     }
     return config.javaConfig[serverid]
+}
+
+// Java major a Minecraft version needs when no Mojang manifest is at hand
+// (mirrors NLCustomLaunch's fallback). New-style versions such as 26.x count as newest.
+function javaMajorForMinecraft(mcVersion){
+    const parts = String(mcVersion || '').split('.').map(x => parseInt(x, 10))
+    const [maj, min, pat] = [parts[0] || 0, parts[1] || 0, parts[2] || 0]
+    if(maj > 1) return 25
+    if(min > 20 || (min === 20 && pat >= 5)) return 21
+    if(min >= 17) return 17
+    if(min >= 16) return 16
+    return 8
+}
+
+// CMS ("ConcurrentMarkSweep") was removed in Java 14: a JVM given -XX:+UseConcMarkSweepGC then
+// refuses to start ("Could not create the Java Virtual Machine").
+const CMS_FLAG = /CMS|ConcMarkSweep/
+const GC_FLAG = /^-XX:\+Use(G1|Parallel|ParallelOld|Serial|Z|Shenandoah)GC$/
+
+/**
+ * Replace options that a modern JVM cannot start with. An untouched Java 8 default list becomes the
+ * G1 default list; a customised list only loses its CMS flags (and gets G1 if no collector is left).
+ *
+ * @param {string[]} opts
+ * @returns {string[]|null} The repaired list, or null when nothing needs to change.
+ */
+function repairJvmOptionsForModernJava(opts){
+    if(!Array.isArray(opts) || !opts.some(o => CMS_FLAG.test(o))) return null
+    const java8 = defaultJavaConfig8(null).jvmOptions
+    if(opts.length === java8.length && opts.every((o, i) => o === java8[i])){
+        return defaultJavaConfig17(null).jvmOptions
+    }
+    const kept = opts.filter(o => !CMS_FLAG.test(o))
+    if(!kept.some(o => GC_FLAG.test(o))){
+        for(const o of defaultJavaConfig17(null).jvmOptions){ if(!kept.includes(o)) kept.push(o) }
+    }
+    return kept
 }
 
 function defaultJavaConfig8(ram) {
@@ -871,6 +912,14 @@ function defaultJavaConfig17(ram) {
 exports.ensureJavaConfig = function(serverid, effectiveJavaOptions, ram) {
     if(!Object.prototype.hasOwnProperty.call(config.javaConfig, serverid)) {
         config.javaConfig[serverid] = defaultJavaConfig(effectiveJavaOptions, ram)
+    } else if(effectiveJavaOptions != null && effectiveJavaOptions.suggestedMajor >= 14) {
+        // An entry created earlier with the Java 8 defaults would stop a modern JVM from starting.
+        const jcfg = config.javaConfig[serverid]
+        const repaired = repairJvmOptionsForModernJava(jcfg.jvmOptions)
+        if(repaired != null){
+            logger.info(`Replaced JVM options that Java ${effectiveJavaOptions.suggestedMajor} cannot start with for ${serverid}.`)
+            jcfg.jvmOptions = repaired
+        }
     }
 }
 
@@ -980,7 +1029,8 @@ exports.setRuntimeJavaExecutable = function(serverid, executable){
  */
 exports.getEffectiveJavaExecutable = function(serverid){
     const jcfg = getOrCreateJavaConfig(serverid)
-    return tempJavaConfig[serverid] || jcfg.customExecutable || null
+    // A Java the user picked wins over the one the launcher found at runtime.
+    return jcfg.customExecutable || tempJavaConfig[serverid] || null
 }
 
 /**
