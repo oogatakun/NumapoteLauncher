@@ -1269,6 +1269,7 @@ const settingsMinRAMLabel     = document.getElementById('settingsMinRAMLabel')
 const settingsMemoryTotal     = document.getElementById('settingsMemoryTotal')
 const settingsMemoryAvail     = document.getElementById('settingsMemoryAvail')
 const settingsJavaExecDetails = document.getElementById('settingsJavaExecDetails')
+const settingsJavaExecVal     = document.getElementById('settingsJavaExecVal')
 const settingsJavaReqDesc     = document.getElementById('settingsJavaReqDesc')
 const settingsJvmOptsLink     = document.getElementById('settingsJvmOptsLink')
 
@@ -1371,15 +1372,26 @@ function initRamSlidersFromConfig(){
         settingsMinRAMLabel.innerHTML = minV.toFixed(1) + 'G'
     }
 }
-// Persist the memory sliders into config for the selected server. Called from
-// saveSettingsValues() on the settings "Done" action.
+// Which instance the Java tab was last set up for, and a Java the user picked/reset there but has
+// not saved yet. Only that instance may be saved from the tab: for any other selection the sliders
+// still hold their placeholder values and writing them would create a bogus config.
+let _javaTabServerId = null
+let _javaExecDirty = false
+let _javaExecChoice = null
+
+// Persist the Java tab (memory sliders and a changed Java executable) into config for the
+// selected server. Called from saveSettingsValues() on the settings "Done" action.
 function saveJavaSettings(){
     const sid = ConfigManager.getSelectedServer()
-    if(!sid) return
+    if(!sid || sid !== _javaTabServerId) return
     const minV = Number(settingsMinRAMRange.getAttribute('value'))
     const maxV = Number(settingsMaxRAMRange.getAttribute('value'))
     if(!Number.isNaN(maxV)) ConfigManager.setMaxRAM(sid, _gbToRamStr(maxV))
     if(!Number.isNaN(minV)) ConfigManager.setMinRAM(sid, _gbToRamStr(minV))
+    if(_javaExecDirty){
+        ConfigManager.setJavaExecutable(sid, _javaExecChoice)
+        _javaExecDirty = false
+    }
 }
 
 /**
@@ -1500,18 +1512,20 @@ function populateMemoryStatus(){
  * @param {string} execPath The executable path to populate against.
  */
 async function populateJavaExecDetails(execPath){
-    const distro = await DistroAPI.getDistribution()
-    if(!distro){
-        settingsJavaExecDetails.innerHTML = Lang.queryJS('settings.java.invalidSelection')
+    // Nothing picked: the launcher finds a suitable Java itself when the game starts.
+    if(!execPath){
+        settingsJavaExecDetails.innerHTML = '自動（起動時に、ランチャーが適したJavaを探して使います）'
         return
     }
-    const server = distro.getServerById(ConfigManager.getSelectedServer())
-    if(!server || !server.effectiveJavaOptions){
+    const distro = await DistroAPI.getDistribution()
+    const server = resolveSelectedServerLike(distro)
+    const eff = server ? await resolveEffectiveJavaOptions(server) : null
+    if(!eff){
         settingsJavaExecDetails.innerHTML = Lang.queryJS('settings.java.invalidSelection')
         return
     }
 
-    const details = await validateSelectedJvm(ensureJavaDirIsRoot(execPath), server.effectiveJavaOptions.supported)
+    const details = await validateSelectedJvm(ensureJavaDirIsRoot(execPath), eff.supported)
 
     if(details != null) {
         settingsJavaExecDetails.innerHTML = Lang.queryJS('settings.java.selectedJava', { version: details.semverStr, vendor: details.vendor })
@@ -1520,8 +1534,62 @@ async function populateJavaExecDetails(execPath){
     }
 }
 
+// The Java requirements of the selected launch config: an official server carries them, a custom
+// instance gets them from its Minecraft version (Mojang's manifest, with a fallback).
+async function resolveEffectiveJavaOptions(server){
+    if(server == null) return null
+    if(server.effectiveJavaOptions) return server.effectiveJavaOptions
+    if(window.NLCustomLaunch && ConfigManager.getCustomInstance(server.rawServer.id) != null){
+        return await window.NLCustomLaunch.getEffectiveJavaOptions(server.rawServer.minecraftVersion)
+    }
+    return null
+}
+
 function populateJavaReqDesc(server) {
     settingsJavaReqDesc.innerHTML = Lang.queryJS('settings.java.requiresJava', { major: server.effectiveJavaOptions.suggestedMajor })
+}
+
+// "選択": pick a Java (javaw.exe / java.exe, or its folder). It is only checked and shown here;
+// it is saved with the rest of the Java tab when the settings are closed.
+document.getElementById('settingsJavaExecSel').onclick = async () => {
+    const res = await remote.dialog.showOpenDialog(remote.getCurrentWindow(), {
+        title: 'Java（bin の javaw.exe）を選択',
+        properties: ['openFile'],
+        filters: process.platform === 'win32' ? [{ name: 'Java', extensions: ['exe'] }] : []
+    })
+    if(res.canceled || !res.filePaths || res.filePaths.length === 0) return
+    await applyPickedJava(res.filePaths[0])
+}
+
+// Check a Java the user picked against what this launch config needs and, if it fits, show it.
+async function applyPickedJava(picked){
+    // java.exe opens a console window; the windowless javaw.exe sits next to it.
+    if(process.platform === 'win32' && /java\.exe$/i.test(picked)){
+        const w = picked.replace(/java\.exe$/i, 'javaw.exe')
+        if(require('fs').existsSync(w)) picked = w
+    }
+    const server = resolveSelectedServerLike(await DistroAPI.getDistribution())
+    const eff = server ? await resolveEffectiveJavaOptions(server) : null
+    const details = eff ? await validateSelectedJvm(ensureJavaDirIsRoot(picked), eff.supported) : null
+    if(details == null){
+        setOverlayContent('このJavaは使えません', `選んだファイルは、この起動構成に必要な Java${eff ? ' ' + eff.suggestedMajor : ''} ではありません。`, 'OK')
+        setOverlayHandler(null)
+        toggleOverlay(true)
+        return false
+    }
+    _javaExecChoice = picked
+    _javaExecDirty = true
+    settingsJavaExecVal.value = picked
+    await populateJavaExecDetails(picked)
+    return true
+}
+
+// "リセット": go back to the Java the launcher finds itself.
+document.getElementById('settingsJavaExecReset').onclick = async () => {
+    _javaExecChoice = null
+    _javaExecDirty = true
+    settingsJavaExecVal.value = ''
+    await populateJavaExecDetails('')
 }
 
 function populateJvmOptsLink(server) {
@@ -1558,15 +1626,27 @@ function bindMinMaxRam(server) {
  */
 async function prepareJavaTab(){
     const distro = await DistroAPI.getDistribution()
-    if(!distro) return
-    const server = distro.getServerById(ConfigManager.getSelectedServer())
+    // An official server, or a custom instance (which is not in the distribution).
+    const server = resolveSelectedServerLike(distro)
     if(!server) return
-    bindMinMaxRam(server)
-    bindRangeSlider(server)
+    const eff = await resolveEffectiveJavaOptions(server)
+    if(!eff) return
+    const view = { rawServer: server.rawServer, effectiveJavaOptions: eff }
+    // Make sure this config has Java settings that suit its Java before the tab reads them.
+    ConfigManager.ensureJavaConfig(server.rawServer.id, eff, server.rawServer.javaOptions?.ram)
+    _javaTabServerId = server.rawServer.id
+    _javaExecDirty = false
+    bindMinMaxRam(view)
+    bindRangeSlider(view)
     initRamSlidersFromConfig()
     populateMemoryStatus()
-    populateJavaReqDesc(server)
-    populateJvmOptsLink(server)
+    populateJavaReqDesc(view)
+    populateJvmOptsLink(view)
+    // The Java the user chose for this config (empty = automatic).
+    const chosen = ConfigManager.getJavaExecutable(server.rawServer.id)
+    _javaExecChoice = chosen || null
+    settingsJavaExecVal.value = chosen || ''
+    await populateJavaExecDetails(chosen || '')
 }
 
 /**
