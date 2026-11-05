@@ -304,6 +304,12 @@ selectAnotherAccountButton = "Select Another Account"
 checkingForUpdateButton = "Checking for Updates..."
 installNowButton = "Install Now"
 checkForUpdatesButton = "Check for Updates"
+promptTitle = "A new version is available"
+promptDesc = "NumapoteLauncher v{version} has been downloaded.<br>Restart and update now?<br><br>If you choose Later, it will be installed automatically when you quit the launcher."
+promptDescManual = "NumapoteLauncher v{version} is available.<br>Open the download page?"
+promptInstallNow = "Update Now"
+promptOpenDownload = "Open Download Page"
+promptLater = "Later"
 
 [js.auth.microsoft.error]
 noProfileTitle = "Error During Login:<br>Profile Not Set Up"

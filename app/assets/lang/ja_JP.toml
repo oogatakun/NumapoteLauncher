@@ -273,6 +273,12 @@ selectAnotherAccountButton = "別のアカウントを選択"
 checkingForUpdateButton = "アップデートをチェック中..."
 installNowButton = "今すぐインストール"
 checkForUpdatesButton = "アップデートを確認"
+promptTitle = "新しいバージョンがあります"
+promptDesc = "沼ぽてランチャー v{version} をダウンロードしました。<br>今すぐ再起動して更新しますか？<br><br>「あとで」を選んでも、ランチャーを終了するときに自動で更新されます。"
+promptDescManual = "沼ぽてランチャー v{version} が公開されています。<br>ダウンロードページを開きますか？"
+promptInstallNow = "今すぐ更新"
+promptOpenDownload = "ダウンロードページを開く"
+promptLater = "あとで"
 
 [js.auth.microsoft.error]
 noProfileTitle = "ログイン中のエラー：<br>プロファイルが設定されていません"
