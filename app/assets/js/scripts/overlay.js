@@ -1324,6 +1324,13 @@ function openShareCode(cid){
             const ta = document.getElementById('shareCodeText')
             ta.value = built.code
             ta.dataset.url = built.url
+            ta.dataset.link = built.link
+            // A code that carries embedded jars is far too long for a link / command line: code only.
+            const tooLong = built.code.length > 8000
+            for(const bid of ['shareCodeCopyLink', 'shareCodeCopyUrl']){
+                const b = document.getElementById(bid)
+                if(b){ b.disabled = tooLong; b.style.opacity = tooLong ? '0.5' : '' }
+            }
             toggleOverlay(true, true, 'shareCodeContent')
         } catch(err){ setOverlayContent('共有失敗', _mrEsc(err.message || '不明なエラー'), 'OK'); setOverlayHandler(null); toggleOverlay(true) }
     }
@@ -1337,36 +1344,124 @@ function openShareCode(cid){
     }
 }
 
-function openShareImport(){
+// Receive: step 1 (paste + 読み込み) decodes the code, step 2 asks where to put it
+// (new launch config / an existing one), then the import runs.
+let _pendingShare = null
+
+function _shareShow(step){
+    document.getElementById('shareImportInput').style.display = step === 'input' ? '' : 'none'
+    document.getElementById('shareChoice').style.display = step === 'choice' ? '' : 'none'
+}
+
+// code (optional): opened from a link; it is only filled in and decoded, never imported without a click.
+function openShareImport(code){
+    _pendingShare = null
     const ta = document.getElementById('shareImportText')
-    if(ta) ta.value = ''
+    if(ta) ta.value = code || ''
     const st = document.getElementById('shareImportStatus')
     if(st) st.textContent = ''
     const btn = document.getElementById('shareImportBtn')
     if(btn) btn.disabled = false
+    _shareShow('input')
     toggleOverlay(true, true, 'shareImportContent')
+    if(code) runShareImport()
 }
 
-async function runShareImport(){
+function runShareImport(){
     let payload
     try { payload = window.NLShare.decodeShareCode(document.getElementById('shareImportText').value) }
     catch(err){ setOverlayContent('コードエラー', _mrEsc(err.message || 'コードが不正です'), 'OK'); setOverlayHandler(null); toggleOverlay(true); return }
+    showShareChoice(payload)
+}
+
+function showShareChoice(payload){
+    _pendingShare = payload
+    const d = window.NLShare.describePayload(payload)
+    // Everything below comes from a code someone else made: only ever textContent, never innerHTML.
+    const lines = ['名前: ' + d.name, 'Minecraft ' + d.mc + ' / ' + d.loader, 'Mod: ' + d.modCount + '件']
+    if(d.hasModpack) lines.push('modpackを含みます')
+    if(d.rawCount) lines.push('出所不明のMod: ' + d.rawCount + '件')
+    document.getElementById('shareChoiceSummary').textContent = lines.join('\n')
+
+    const sel = document.getElementById('shareExistingSelect')
+    sel.innerHTML = ''
+    const cands = d.modCount > 0 || d.rawCount > 0 ? window.NLShare.candidateInstances(payload) : []
+    for(const c of cands){
+        const o = document.createElement('option')
+        o.value = c.id
+        o.textContent = c.name + '（' + c.mc + ' / ' + c.loader + '）' + (c.sameEnv ? '' : ' ※版が違います')
+        sel.appendChild(o)
+    }
+    const pick = cands.find(c => c.sameEnv) || cands[0]
+    if(pick) sel.value = pick.id
+    const radios = document.getElementsByName('shareTarget')
+    const existingRadio = Array.from(radios).find(r => r.value === 'existing')
+    existingRadio.disabled = cands.length === 0
+    existingRadio.parentElement.style.opacity = cands.length === 0 ? '0.5' : ''
+    Array.from(radios).find(r => r.value === 'new').checked = true
+    updateShareChoiceNote()
+    _shareShow('choice')
+}
+
+function _shareTarget(){
+    const r = Array.from(document.getElementsByName('shareTarget')).find(x => x.checked)
+    return r ? r.value : 'new'
+}
+
+function updateShareChoiceNote(){
+    const isExisting = _shareTarget() === 'existing'
+    document.getElementById('shareExistingSelect').disabled = !isExisting
+    const note = document.getElementById('shareChoiceNote')
+    if(!isExisting){
+        note.textContent = '共有された内容で、新しい起動構成を作ります。'
+        return
+    }
+    const p = _pendingShare || {}
+    const parts = ['同じModは置き換え、共有に入っていないModはそのまま残します。']
+    if(p.modpack) parts.push('modpack本体は新規作成のときだけ取り込まれます（ここではModのみ）。')
+    const c = window.NLShare.candidateInstances(p).find(x => x.id === document.getElementById('shareExistingSelect').value)
+    if(c && !c.sameEnv) parts.push('Minecraft/ローダーが違うため、この構成に合う版のModを取得します。')
+    note.textContent = parts.join('\n')
+}
+
+// Ask about embedded jars (as before), then import into the chosen target.
+async function startShareImport(){
+    const payload = _pendingShare
+    if(!payload) return
+    const target = _shareTarget()
+    const existingId = target === 'existing' ? document.getElementById('shareExistingSelect').value : null
+    if(target === 'existing' && !existingId) return
     const doImport = async (includeRaw) => {
         toggleOverlay(true, false, 'shareImportContent') // ESC off during import
         const status = document.getElementById('shareImportStatus')
-        const btn = document.getElementById('shareImportBtn')
-        if(btn) btn.disabled = true
+        const go = document.getElementById('shareChoiceGo')
+        const back = document.getElementById('shareChoiceBack')
+        if(go) go.disabled = true
+        if(back) back.disabled = true
         if(status) status.textContent = '取り込み中...'
+        const progress = (i, n) => { if(status) status.textContent = 'MOD ' + i + ' / ' + n }
         try {
-            const res = await window.NLShare.importShareCode(payload, { includeRaw }, (i, n) => { if(status) status.textContent = 'MOD ' + i + ' / ' + n })
-            if(res.failed && res.failed.length){
-                setOverlayContent('一部のMODを取得できませんでした', _mrEsc(res.failed.slice(0, 10).join('\n')), 'OK')
-                setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) }); toggleOverlay(true)
+            if(existingId){
+                const res = await window.NLShare.importIntoExisting(payload, existingId, { includeRaw }, progress)
+                const out = []
+                out.push('追加 ' + res.added.length + '件 / 置き換え ' + res.replaced.length + '件')
+                if(res.adjusted.length) out.push('別の版で取り込み: ' + res.adjusted.slice(0, 8).join(', ') + (res.adjusted.length > 8 ? ' …' : ''))
+                if(res.failed.length) out.push('取得できなかったもの: ' + res.failed.slice(0, 8).join(', ') + (res.failed.length > 8 ? ' …' : ''))
+                setOverlayContent('「' + _mrEsc(res.name) + '」に取り込みました', _mrEsc(out.join('\n')), 'OK')
+                setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) })
+                toggleOverlay(true)
             } else {
-                await toggleServerSelection(true); setServerTab('custom')
+                const res = await window.NLShare.importShareCode(payload, { includeRaw }, progress)
+                if(res.failed && res.failed.length){
+                    setOverlayContent('一部のMODを取得できませんでした', _mrEsc(res.failed.slice(0, 10).join('\n')), 'OK')
+                    setOverlayHandler(() => { toggleServerSelection(true).then(() => setServerTab('custom')) }); toggleOverlay(true)
+                } else {
+                    await toggleServerSelection(true); setServerTab('custom')
+                }
             }
         } catch(err){
-            if(btn) btn.disabled = false
+            if(go) go.disabled = false
+            if(back) back.disabled = false
             setOverlayContent('取り込み失敗', _mrEsc(err.message || '不明なエラー'), 'OK'); setOverlayHandler(null); toggleOverlay(true)
         }
     }
@@ -1383,17 +1478,50 @@ async function runShareImport(){
 document.addEventListener('DOMContentLoaded', () => {
     const rb = document.getElementById('customReceiveButton')
     if(rb) rb.addEventListener('click', () => openShareImport())
+    const copy = (text) => { try { require('electron').clipboard.writeText(text || '') } catch(e){ /* ignore */ } }
     const cp = document.getElementById('shareCodeCopy')
-    if(cp) cp.addEventListener('click', () => { try { require('electron').clipboard.writeText(document.getElementById('shareCodeText').value) } catch(e){ /* ignore */ } })
+    if(cp) cp.addEventListener('click', () => copy(document.getElementById('shareCodeText').value))
+    const cpl = document.getElementById('shareCodeCopyLink')
+    if(cpl) cpl.addEventListener('click', () => copy(document.getElementById('shareCodeText').dataset.link))
     const cpu = document.getElementById('shareCodeCopyUrl')
-    if(cpu) cpu.addEventListener('click', () => { try { require('electron').clipboard.writeText(document.getElementById('shareCodeText').dataset.url || '') } catch(e){ /* ignore */ } })
+    if(cpu) cpu.addEventListener('click', () => copy(document.getElementById('shareCodeText').dataset.url))
     const scc = document.getElementById('shareCodeCancel')
     if(scc) scc.addEventListener('click', () => _backToServerCustom())
     const sib = document.getElementById('shareImportBtn')
     if(sib) sib.addEventListener('click', () => runShareImport())
     const sic = document.getElementById('shareImportCancel')
     if(sic) sic.addEventListener('click', () => _backToServerCustom())
+    Array.from(document.getElementsByName('shareTarget')).forEach(r => r.addEventListener('change', updateShareChoiceNote))
+    const se = document.getElementById('shareExistingSelect')
+    if(se) se.addEventListener('change', updateShareChoiceNote)
+    const go = document.getElementById('shareChoiceGo')
+    if(go) go.addEventListener('click', () => startShareImport())
+    const back = document.getElementById('shareChoiceBack')
+    if(back) back.addEventListener('click', () => { _pendingShare = null; _shareShow('input') })
 })
+
+// A share code that arrived as a link (numapotelauncher://share/<code>, or the https page that forwards
+// to it). It is opened on the receive screen once the launcher is idle on its main view: not while the
+// loading screen is up, not on top of another overlay, not before sign-in.
+window.NLDeepLink = {
+    pending: null,
+    receive(code){ this.pending = code; this.flush() },
+    flush(){
+        if(!this.pending) return
+        let ready = false
+        try {
+            const loading = document.getElementById('loadingContainer')
+            const loadingGone = !loading || getComputedStyle(loading).display === 'none'
+            ready = loadingGone && getCurrentView() === VIEWS.landing && !isOverlayVisible()
+        } catch(e) { ready = false }
+        if(!ready) return
+        const code = this.pending
+        this.pending = null
+        openShareImport(code)
+    }
+}
+require('electron').ipcRenderer.on('share-deeplink', (e, code) => { window.NLDeepLink.receive(code) })
+setInterval(() => { window.NLDeepLink.flush() }, 1000)
 
 // Return from a custom-tab sub-overlay (modpack/share) back to the 自作 list.
 function _backToServerCustom(){

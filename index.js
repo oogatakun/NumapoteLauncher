@@ -24,7 +24,11 @@ process.on('unhandledRejection', (reason) => {
     console.error('[main] unhandledRejection', reason)
 })
 
-app.setAsDefaultProtocolClient('numapotelauncher')
+// Only the installed app owns the numapotelauncher:// links. A development / test run (electron .)
+// must not overwrite the OS registration, or clicking a link would start that checkout instead.
+if (app.isPackaged) {
+    app.setAsDefaultProtocolClient('numapotelauncher')
+}
 
 if (isDev) {
     const devDataRoot = path.join(app.getPath('appData'), 'NumapoteLauncher-dev')
@@ -76,8 +80,23 @@ app.on('ready', () => {
     deepLinkUrl = args.find(arg => arg.startsWith('numapotelauncher://'))
 })
 
+// A share code: 'NL2' (compact) or 'NLPACK1' (old) followed by base64url characters.
+const SHARE_CODE_REGEX = /^(NL2|NLPACK1)[A-Za-z0-9_-]+$/
+
 function handleDeepLink(url) {
-    const parsedUrl = new URL(url)
+    let parsedUrl
+    try { parsedUrl = new URL(url) } catch (err) { return }
+
+    // numapotelauncher://share/<code>  — open the receive screen with this code filled in.
+    // The renderer only decodes it and asks the user what to do; nothing is imported from here.
+    if (parsedUrl.hostname.toLowerCase() === 'share') {
+        const code = decodeURIComponent(parsedUrl.pathname || '').replace(/^\/+|\/+$/g, '') || parsedUrl.searchParams.get('c') || ''
+        if (SHARE_CODE_REGEX.test(code) && code.length <= 200000 && win && win.webContents) {
+            win.webContents.send('share-deeplink', code)
+        }
+        return
+    }
+
     const query = parsedUrl.searchParams.get('query')
 
     if (win && win.webContents) {

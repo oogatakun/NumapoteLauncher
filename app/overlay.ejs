@@ -149,23 +149,37 @@
     </div>
     <div id="shareCodeContent" style="display: none;">
         <span id="shareCodeHeader">構成を共有</span>
-        <div id="shareCodeDesc">このコードを相手に渡してください。「コードで受け取り」で復元できます。</div>
+        <div id="shareCodeDesc">コードかリンクを相手に渡してください。「コードで受け取り」に貼り付けるか、リンクを開くとランチャーが起動します。</div>
         <textarea id="shareCodeText" readonly></textarea>
         <div id="shareCodeActions">
             <button id="shareCodeCopy" type="button">コードをコピー</button>
-            <button id="shareCodeCopyUrl" type="button">URLをコピー</button>
+            <button id="shareCodeCopyLink" type="button" title="Discordなどでクリックして開けるリンク">リンクをコピー</button>
+            <button id="shareCodeCopyUrl" type="button" title="ランチャーを直接開くURL（numapotelauncher://）">アプリ用URL</button>
             <button id="shareCodeCancel" class="overlayKeybindEsc" type="button">閉じる</button>
         </div>
     </div>
     <div id="shareImportContent" style="display: none;">
         <span id="shareImportHeader">コードで受け取り</span>
-        <div id="shareImportDesc">受け取った共有コード（<code>NLPACK1…</code>）または <code>numapote://</code> URL を下の欄に貼り付けて「取り込み」を押してください。</div>
-        <textarea id="shareImportText" placeholder="ここに共有コードを貼り付け"></textarea>
-        <div id="shareImportStatus"></div>
-        <div id="shareImportActions">
-            <button id="shareImportBtn" class="sharePrimary" type="button">取り込み</button>
-            <button id="shareImportCancel" class="overlayKeybindEsc" type="button">キャンセル</button>
+        <div id="shareImportInput">
+            <div id="shareImportDesc">受け取った共有コード、またはリンク／URLを貼り付けて「読み込み」を押してください。</div>
+            <textarea id="shareImportText" placeholder="ここに共有コードまたはリンクを貼り付け"></textarea>
+            <div id="shareImportActions">
+                <button id="shareImportBtn" class="sharePrimary" type="button">読み込み</button>
+                <button id="shareImportCancel" class="overlayKeybindEsc" type="button">キャンセル</button>
+            </div>
         </div>
+        <div id="shareChoice" style="display: none;">
+            <div id="shareChoiceSummary"></div>
+            <label class="shareChoiceRow"><input type="radio" name="shareTarget" value="new" checked><span>新規作成</span></label>
+            <label class="shareChoiceRow"><input type="radio" name="shareTarget" value="existing"><span>既存の構成に追加</span></label>
+            <select id="shareExistingSelect" disabled></select>
+            <div id="shareChoiceNote"></div>
+            <div id="shareChoiceActions">
+                <button id="shareChoiceGo" class="sharePrimary" type="button">取り込む</button>
+                <button id="shareChoiceBack" type="button">戻る</button>
+            </div>
+        </div>
+        <div id="shareImportStatus"></div>
     </div>
     <script src="./assets/js/scripts/overlay.js"></script>
 </div>

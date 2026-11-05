@@ -209,5 +209,13 @@
         return { files: out, unresolved, deps: Array.from(depMap.values()) }
     }
 
-    window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile, searchModpacks, getModpackVersions, resolveFiles, getModsBulk, getVersionById, postJson }
+    // Display name of a mod (used to name mods a share code only carries ids for).
+    async function getProjectTitle(projectId){
+        try {
+            const map = await getModsBulk([projectId])
+            return (map[String(projectId)] && map[String(projectId)].name) || null
+        } catch(e) { return null }
+    }
+
+    window.NLCurseForge = { search, getBestVersion, collectRequired, hasKey, _mapHit, _mapFile, searchModpacks, getModpackVersions, resolveFiles, getModsBulk, getVersionById, postJson, getProjectTitle }
 })()

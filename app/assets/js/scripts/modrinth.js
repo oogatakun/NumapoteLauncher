@@ -147,5 +147,13 @@
         return { files: out, unresolved, deps: Array.from(depMap.values()) }
     }
 
-    window.NLModrinth = { search, getBestVersion, getVersionById, collectRequired, searchModpacks, getModpackVersions }
+    // Display name of a project (used to name mods a share code only carries ids for).
+    async function getProjectTitle(projectId){
+        try {
+            const p = await getJson(`${API}/project/${encodeURIComponent(projectId)}`)
+            return (p && p.title) || null
+        } catch(e) { return null }
+    }
+
+    window.NLModrinth = { search, getBestVersion, getVersionById, collectRequired, searchModpacks, getModpackVersions, getProjectTitle }
 })()
