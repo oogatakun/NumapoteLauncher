@@ -1379,6 +1379,50 @@ let _javaTabServerId = null
 let _javaExecDirty = false
 let _javaExecChoice = null
 
+// The Minecraft tab: each control names its setting in a cValue attribute. Values go to config as
+// soon as they change (written to disk by the Done button, like the other tabs), so re-running
+// prepareSettings() never throws away an edit.
+const _gameSettingBindings = {
+    GameWidth: { get: () => ConfigManager.getGameWidth(), set: (v) => ConfigManager.setGameWidth(v), valid: (v) => ConfigManager.validateGameWidth(v), number: true },
+    GameHeight: { get: () => ConfigManager.getGameHeight(), set: (v) => ConfigManager.setGameHeight(v), valid: (v) => ConfigManager.validateGameHeight(v), number: true },
+    Fullscreen: { get: () => ConfigManager.getFullscreen(), set: (v) => ConfigManager.setFullscreen(v) },
+    AutoConnect: { get: () => ConfigManager.getAutoConnect(), set: (v) => ConfigManager.setAutoConnect(v) },
+    LaunchDetached: { get: () => ConfigManager.getLaunchDetached(), set: (v) => ConfigManager.setLaunchDetached(v) },
+    ShowLaunchLog: { get: () => ConfigManager.getShowLaunchLog(), set: (v) => ConfigManager.setShowLaunchLog(v) }
+}
+
+function _gameSettingInputs(){
+    return Array.from(document.querySelectorAll('#settingsTabMinecraft [cValue]'))
+        .filter((el) => _gameSettingBindings[el.getAttribute('cValue')])
+}
+
+function loadGameSettings(){
+    for(const el of _gameSettingInputs()){
+        const b = _gameSettingBindings[el.getAttribute('cValue')]
+        if(el.type === 'checkbox') el.checked = !!b.get()
+        else el.value = b.get()
+    }
+}
+
+function saveGameSettings(){
+    for(const el of _gameSettingInputs()){
+        const b = _gameSettingBindings[el.getAttribute('cValue')]
+        if(el.type === 'checkbox'){
+            b.set(el.checked)
+        } else if(b.number){
+            // Keep the stored value when the box is empty or not a number.
+            if(b.valid(el.value)) b.set(Number.parseInt(el.value))
+            else el.value = b.get()
+        }
+    }
+}
+
+function bindGameSettings(){
+    for(const el of _gameSettingInputs()){
+        el.addEventListener('change', saveGameSettings)
+    }
+}
+
 // Persist the Java tab (memory sliders and a changed Java executable) into config for the
 // selected server. Called from saveSettingsValues() on the settings "Done" action.
 function saveJavaSettings(){
@@ -1864,12 +1908,14 @@ async function prepareSettings(first = false) {
     if(first){
         setupSettingsTabs()
         initSettingsValidators()
+        bindGameSettings()
         prepareUpdateTab()
     } else {
         await prepareModsTab()
     }
 
     await initSettingsValues()
+    loadGameSettings()
     prepareAccountsTab()
     await prepareJavaTab()
     prepareAboutTab()

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>起動ログ</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #171614; color: #e8e6e3; font-family: "Segoe UI", "Yu Gothic UI", sans-serif; }
+  body { display: flex; flex-direction: column; }
+  #bar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #211f1c; border-bottom: 1px solid #38342f; }
+  #bar button { padding: 5px 14px; border-radius: 4px; border: 1px solid #4a453e; background: #2c2924; color: inherit; cursor: pointer; font-size: 13px; }
+  #bar button:hover { background: #38342d; }
+  #bar label { margin-left: auto; font-size: 12px; color: #b9b4ab; display: flex; align-items: center; gap: 4px; }
+  #status { font-size: 12px; color: #8fcf8f; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #log { flex: 1; overflow: auto; margin: 0; padding: 8px 10px; font: 12px/1.45 Consolas, "Cascadia Mono", monospace; white-space: pre-wrap; word-break: break-all; user-select: text; }
+  .line.err { color: #ff8f86; }
+  .line.warn { color: #e8c76a; }
+  .line.game { color: #b6e3b6; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="copy" type="button">コピー</button>
+  <button id="save" type="button">保存</button>
+  <span id="status"></span>
+  <label><input id="follow" type="checkbox" checked> 自動スクロール</label>
+</div>
+<pre id="log"></pre>
+<script>
+(function () {
+  var MAX_ROWS = 5000;
+  var log = document.getElementById('log');
+  var follow = document.getElementById('follow');
+  var statusEl = document.getElementById('status');
+  var statusTimer = null;
+
+  function classFor(text) {
+    if (/\[(ERROR|FATAL)\]|\[GAME stderr\]|Exception|\bERROR\b/.test(text)) return 'line err';
+    if (/\[WARN\]|\bWARN\b/.test(text)) return 'line warn';
+    if (/\[Minecraft\]/.test(text)) return 'line game';
+    return 'line';
+  }
+
+  function add(lines) {
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < lines.length; i++) {
+      var d = document.createElement('div');
+      d.className = classFor(lines[i]);
+      d.textContent = lines[i];
+      frag.appendChild(d);
+    }
+    log.appendChild(frag);
+    while (log.childNodes.length > MAX_ROWS) { log.removeChild(log.firstChild); }
+    if (follow.checked) { log.scrollTop = log.scrollHeight; }
+  }
+
+  function setAll(lines) {
+    log.textContent = '';
+    add(lines || []);
+  }
+
+  function say(msg) {
+    statusEl.textContent = msg;
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () { statusEl.textContent = ''; }, 4000);
+  }
+
+  window.launchLog.onInit(setAll);
+  window.launchLog.onAppend(add);
+  window.launchLog.getBacklog().then(setAll);
+
+  // Scrolling up by hand pauses following; reaching the bottom again resumes it.
+  log.addEventListener('scroll', function () {
+    follow.checked = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+  });
+
+  document.getElementById('copy').addEventListener('click', function () {
+    window.launchLog.copy().then(function (r) {
+      say(r && r.success ? 'コピーしました（' + r.count + '行）' : 'コピーできませんでした');
+    });
+  });
+  document.getElementById('save').addEventListener('click', function () {
+    window.launchLog.save().then(function (r) {
+      if (r && r.success) { say('保存しました: ' + r.path); }
+      else if (r && !r.canceled) { say('保存できませんでした'); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

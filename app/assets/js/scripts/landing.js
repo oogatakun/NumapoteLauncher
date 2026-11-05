@@ -539,6 +539,10 @@ async function dlAsync(login = true) {
 
     const loggerLaunchSuite = LoggerUtil.getLogger('LaunchSuite')
 
+    if(window.NLLaunchLog && ConfigManager.getShowLaunchLog()){
+        window.NLLaunchLog.start()
+    }
+
     // Custom (user-created) instance path — bypasses the distribution.
     if(window.NLCustomLaunch && window.NLCustomLaunch.isCustomSelected()){
         if(login && ConfigManager.getSelectedAccount() == null){

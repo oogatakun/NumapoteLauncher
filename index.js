@@ -2,7 +2,7 @@ const remoteMain = require('@electron/remote/main')
 remoteMain.initialize()
 
 // Requirements
-const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog, clipboard } = require('electron')
 const autoUpdater                       = require('electron-updater').autoUpdater
 const ejse                              = require('ejs-electron')
 const isDev                             = require('./app/assets/js/isdev')
@@ -383,6 +383,95 @@ ipcMain.handle('save-error-log', async (event, content, defaultFileName) => {
         return { success: true, path: result.filePath }
     } catch(err) {
         console.error('[main] save-error-log failed', err)
+        return { success: false, error: err.message }
+    }
+})
+
+// ---- Launch log window ----------------------------------------------------
+// The renderer forwards console lines while a launch is running; they are kept here (capped) so a
+// window opened late, or reopened, still shows the whole launch. The window itself is sandboxed with
+// a tiny preload: game output is untrusted text and is only ever rendered as text.
+const LAUNCH_LOG_MAX_LINES = 5000
+let launchLogLines = []
+let launchLogWindow = null
+
+function openLaunchLogWindow() {
+    if(launchLogWindow && !launchLogWindow.isDestroyed()){
+        launchLogWindow.show()
+        return
+    }
+    launchLogWindow = new BrowserWindow({
+        width: 900,
+        height: 520,
+        minWidth: 480,
+        minHeight: 260,
+        title: '起動ログ',
+        icon: getPlatformIcon('Numapoteicon'),
+        autoHideMenuBar: true,
+        backgroundColor: '#171614',
+        webPreferences: {
+            preload: path.join(__dirname, 'app', 'assets', 'js', 'launchlogpreload.js'),
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true
+        }
+    })
+    launchLogWindow.removeMenu()
+    launchLogWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    launchLogWindow.webContents.on('will-navigate', (e) => e.preventDefault())
+    launchLogWindow.on('closed', () => { launchLogWindow = null })
+    launchLogWindow.loadFile(path.join(__dirname, 'app', 'launchlog.html'))
+}
+
+ipcMain.on('launchlog-open', () => {
+    launchLogLines = []
+    openLaunchLogWindow()
+    if(launchLogWindow && !launchLogWindow.webContents.isLoading()){
+        launchLogWindow.webContents.send('launchlog-init', launchLogLines)
+    }
+})
+
+ipcMain.on('launchlog-lines', (event, lines) => {
+    if(!Array.isArray(lines) || !launchLogWindow || launchLogWindow.isDestroyed()) return
+    const clean = lines.filter((l) => typeof l === 'string').slice(0, 2000)
+    if(clean.length === 0) return
+    launchLogLines.push(...clean)
+    if(launchLogLines.length > LAUNCH_LOG_MAX_LINES){
+        launchLogLines.splice(0, launchLogLines.length - LAUNCH_LOG_MAX_LINES)
+    }
+    if(!launchLogWindow.webContents.isLoading()){
+        launchLogWindow.webContents.send('launchlog-append', clean)
+    }
+})
+
+// The page asks for the backlog once it is ready (it may load after the first lines arrived).
+ipcMain.handle('launchlog-get', (event) => {
+    if(!launchLogWindow || launchLogWindow.isDestroyed() || event.sender !== launchLogWindow.webContents) return []
+    return launchLogLines
+})
+
+ipcMain.handle('launchlog-copy', (event) => {
+    if(!launchLogWindow || launchLogWindow.isDestroyed() || event.sender !== launchLogWindow.webContents) return { success: false }
+    clipboard.writeText(launchLogLines.join('\n'))
+    return { success: true, count: launchLogLines.length }
+})
+
+ipcMain.handle('launchlog-save', async (event) => {
+    try {
+        if(!launchLogWindow || launchLogWindow.isDestroyed() || event.sender !== launchLogWindow.webContents) return { success: false }
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+        const result = await dialog.showSaveDialog(launchLogWindow, {
+            title: '起動ログを保存',
+            defaultPath: path.join(app.getPath('desktop'), 'numapote-launch-' + stamp + '.log'),
+            filters: [{ name: 'Log', extensions: ['log', 'txt'] }]
+        })
+        if(result.canceled || !result.filePath){
+            return { success: false, canceled: true }
+        }
+        await fs.promises.writeFile(result.filePath, launchLogLines.join('\n') + '\n', 'utf8')
+        return { success: true, path: result.filePath }
+    } catch(err) {
+        console.error('[main] launchlog-save failed', err)
         return { success: false, error: err.message }
     }
 })
