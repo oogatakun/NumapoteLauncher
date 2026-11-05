@@ -1316,24 +1316,36 @@ document.addEventListener('DOMContentLoaded', () => {
 })
 
 // --- Share / receive launch configs ---
+function _showShareCode(cid, includeRaw){
+    try {
+        const built = window.NLShare.buildShareCode(cid, includeRaw)
+        const ta = document.getElementById('shareCodeText')
+        ta.value = built.code
+        ta.dataset.url = built.url
+        ta.dataset.link = built.link
+        ta.dataset.cid = cid
+        // A code that carries embedded jars is far too long for a link / command line: code only.
+        const tooLong = built.code.length > 8000
+        for(const bid of ['shareCodeCopyLink', 'shareCodeCopyUrl']){
+            const b = document.getElementById(bid)
+            if(b){ b.disabled = tooLong; b.style.opacity = tooLong ? '0.5' : '' }
+        }
+        const note = document.getElementById('shareCodeLongNote')
+        const rebuild = document.getElementById('shareCodeNoJars')
+        if(note){
+            note.style.display = tooLong ? '' : 'none'
+            note.textContent = !tooLong ? '' : (includeRaw
+                ? 'MODのファイルそのものを含めているため、コードが非常に長く（' + built.code.length + '文字）、リンクとアプリ用URLは使えません。「コードをコピー」で渡してください。リンクで渡したい場合は、MODファイルを含めずに作り直せます（出所不明のMODは相手側には入りません）。'
+                : 'コードが長い（' + built.code.length + '文字）ため、リンクとアプリ用URLは使えません。「コードをコピー」で渡してください。')
+        }
+        if(rebuild) rebuild.style.display = (tooLong && includeRaw) ? '' : 'none'
+        toggleOverlay(true, true, 'shareCodeContent')
+    } catch(err){ setOverlayContent('共有失敗', _mrEsc(err.message || '不明なエラー'), 'OK'); setOverlayHandler(null); toggleOverlay(true) }
+}
+
 function openShareCode(cid){
     const unknown = window.NLShare.collectUnknownJars(cid)
-    const proceed = (includeRaw) => {
-        try {
-            const built = window.NLShare.buildShareCode(cid, includeRaw)
-            const ta = document.getElementById('shareCodeText')
-            ta.value = built.code
-            ta.dataset.url = built.url
-            ta.dataset.link = built.link
-            // A code that carries embedded jars is far too long for a link / command line: code only.
-            const tooLong = built.code.length > 8000
-            for(const bid of ['shareCodeCopyLink', 'shareCodeCopyUrl']){
-                const b = document.getElementById(bid)
-                if(b){ b.disabled = tooLong; b.style.opacity = tooLong ? '0.5' : '' }
-            }
-            toggleOverlay(true, true, 'shareCodeContent')
-        } catch(err){ setOverlayContent('共有失敗', _mrEsc(err.message || '不明なエラー'), 'OK'); setOverlayHandler(null); toggleOverlay(true) }
-    }
+    const proceed = (includeRaw) => _showShareCode(cid, includeRaw)
     if(unknown.length){
         setOverlayContent('出所不明のMOD', '出所不明のMOD（' + unknown.length + '件）も共有しますか？\n' + _mrEsc(unknown.map(u => u.name).slice(0, 15).join('\n')), 'はい', 'いいえ')
         setOverlayHandler(() => proceed(true))
@@ -1481,6 +1493,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const copy = (text) => { try { require('electron').clipboard.writeText(text || '') } catch(e){ /* ignore */ } }
     const cp = document.getElementById('shareCodeCopy')
     if(cp) cp.addEventListener('click', () => copy(document.getElementById('shareCodeText').value))
+    const nj = document.getElementById('shareCodeNoJars')
+    if(nj) nj.addEventListener('click', () => _showShareCode(document.getElementById('shareCodeText').dataset.cid, false))
     const cpl = document.getElementById('shareCodeCopyLink')
     if(cpl) cpl.addEventListener('click', () => copy(document.getElementById('shareCodeText').dataset.link))
     const cpu = document.getElementById('shareCodeCopyUrl')

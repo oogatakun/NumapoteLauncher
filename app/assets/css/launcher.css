@@ -5681,3 +5681,4 @@ form[name='submitSecretQuestion'] p {
 #shareChoiceActions button:hover { box-shadow: 0 0 10px 0 #fff; }
 #shareChoiceActions button[disabled] { opacity: 0.5; cursor: default; }
 #shareChoiceBack { border-color: rgba(255,255,255,0.5) !important; color: rgba(255,255,255,0.8) !important; }
+#shareCodeLongNote { width: 100%; box-sizing: border-box; margin-top: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.5; text-align: left; color: #ffe08a; background: rgba(255,224,138,0.1); border: 1px solid rgba(255,224,138,0.45); border-radius: 4px; }
