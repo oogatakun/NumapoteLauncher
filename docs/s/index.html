@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>沼ぽてランチャー 共有リンク</title>
+<style>
+  :root { --bg: #1b1d22; --card: #262a31; --text: #f2f4f7; --sub: #a9b0bb; --accent: #7ad67a; --line: #3a404a; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f2f4f7; --card: #ffffff; --text: #1b1d22; --sub: #5b6470; --accent: #2e8b3e; --line: #d5dae1; }
+  }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 48px 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { line-height: 1.7; margin: 8px 0; }
+  .sub { color: var(--sub); font-size: 13px; }
+  .open { display: inline-block; margin: 14px 0 6px; padding: 10px 22px; border-radius: 6px; background: var(--accent); color: #fff; font-weight: bold; text-decoration: none; }
+  textarea { width: 100%; box-sizing: border-box; height: 96px; margin-top: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: 12px/1.4 monospace; word-break: break-all; resize: none; }
+  button { margin-top: 8px; padding: 7px 16px; border-radius: 6px; border: 1px solid var(--line); background: transparent; color: var(--text); cursor: pointer; }
+  .err { color: #e5645a; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>沼ぽてランチャーの共有リンク</h1>
+
+    <section id="ok" hidden>
+      <p id="status">ランチャーを開いています…</p>
+      <a id="open" class="open" href="#">ランチャーで開く</a>
+      <p class="sub">開かない場合は、ランチャーを起動して「自作」→「コードで受け取り」に、下のコードを貼り付けてください。</p>
+      <textarea id="code" readonly></textarea>
+      <button id="copy" type="button">コードをコピー</button>
+      <p class="sub">このコードはあなたのブラウザの中だけで処理され、サーバーには送られません。ランチャー側でも、内容を確認してから取り込みます。</p>
+    </section>
+
+    <section id="bad" hidden>
+      <p class="err">共有コードが見つかりません。</p>
+      <p class="sub">リンクが途中で切れている可能性があります。もう一度、共有元からリンクをコピーしてください。</p>
+    </section>
+  </div>
+</main>
+<script>
+(function () {
+  // The code travels in the URL fragment (#...), which browsers never send to a server.
+  var raw = (location.hash || '').replace(/^#/, '');
+  if (!raw) { raw = new URLSearchParams(location.search).get('c') || ''; }
+  var valid = /^(NL2|NLPACK1)[A-Za-z0-9_-]+$/.test(raw) && raw.length <= 200000;
+  document.getElementById(valid ? 'ok' : 'bad').hidden = false;
+  if (!valid) { return; }
+
+  var url = 'numapotelauncher://share/' + raw;
+  document.getElementById('open').setAttribute('href', url);
+  document.getElementById('code').value = raw;
+  document.getElementById('copy').addEventListener('click', function () {
+    var box = document.getElementById('code');
+    box.select();
+    try { navigator.clipboard.writeText(raw); } catch (e) { document.execCommand('copy'); }
+    this.textContent = 'コピーしました';
+  });
+  // Hand over to the installed launcher. If nothing handles the scheme the page simply stays.
+  setTimeout(function () { location.href = url; }, 400);
+  setTimeout(function () {
+    document.getElementById('status').textContent = '自動で開かない場合は、下のボタンを押してください。';
+  }, 2500);
+})();
+</script>
+</body>
+</html>
