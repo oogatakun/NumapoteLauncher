@@ -35,9 +35,9 @@
   var statusTimer = null;
 
   function classFor(text) {
-    if (/\[(ERROR|FATAL)\]|\[GAME stderr\]|Exception|\bERROR\b/.test(text)) return 'line err';
-    if (/\[WARN\]|\bWARN\b/.test(text)) return 'line warn';
-    if (/\[Minecraft\]/.test(text)) return 'line game';
+    if (/^\[stderr\]|\/(ERROR|FATAL)\]|Exception|起動に失敗/.test(text)) return 'line err';
+    if (/\/WARN\]/.test(text)) return 'line warn';
+    if (/^(起動構成|Java|起動引数|ゲームが終了)/.test(text)) return 'line game';
     return 'line';
   }
 
