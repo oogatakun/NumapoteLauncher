@@ -172,7 +172,8 @@ const DEFAULT_CONFIG = {
             resHeight: 720,
             fullscreen: false,
             autoConnect: true,
-            launchDetached: true
+            launchDetached: true,
+            showLaunchLog: false
         },
         launcher: {
             allowPrerelease: false,
@@ -1177,6 +1178,25 @@ exports.getLaunchDetached = function(def = false){
  */
 exports.setLaunchDetached = function(launchDetached){
     config.settings.game.launchDetached = launchDetached
+}
+
+/**
+ * Check if a window with the launch log should open when the game is launched.
+ *
+ * @param {boolean} def Optional. If true, the default value will be returned.
+ * @returns {boolean} Whether or not the launch log is shown on launch.
+ */
+exports.getShowLaunchLog = function(def = false){
+    return !def ? config.settings.game.showLaunchLog === true : DEFAULT_CONFIG.settings.game.showLaunchLog
+}
+
+/**
+ * Change the status of whether or not the launch log is shown on launch.
+ *
+ * @param {boolean} showLaunchLog Whether or not the launch log is shown on launch.
+ */
+exports.setShowLaunchLog = function(showLaunchLog){
+    config.settings.game.showLaunchLog = showLaunchLog === true
 }
 
 // Launcher Settings
