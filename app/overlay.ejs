@@ -151,8 +151,10 @@
         <span id="shareCodeHeader">構成を共有</span>
         <div id="shareCodeDesc">コードかリンクを相手に渡してください。「コードで受け取り」に貼り付けるか、リンクを開くとランチャーが起動します。</div>
         <textarea id="shareCodeText" readonly></textarea>
+        <div id="shareCodeLongNote" style="display: none;"></div>
         <div id="shareCodeActions">
             <button id="shareCodeCopy" type="button">コードをコピー</button>
+            <button id="shareCodeNoJars" type="button" style="display: none;" title="出所不明のMODのファイルを含めず、コードを短くして作り直します">MODファイルを含めず作り直す</button>
             <button id="shareCodeCopyLink" type="button" title="Discordなどでクリックして開けるリンク">リンクをコピー</button>
             <button id="shareCodeCopyUrl" type="button" title="ランチャーを直接開くURL（numapotelauncher://）">アプリ用URL</button>
             <button id="shareCodeCancel" class="overlayKeybindEsc" type="button">閉じる</button>
