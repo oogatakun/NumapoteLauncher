@@ -79,6 +79,10 @@ class ProcessBuilder {
         loggableArgs[loggableArgs.findIndex(x => x === this.authUser.accessToken)] = '**********'
 
         logger.info('Launch Arguments:', loggableArgs)
+        if(global.NLLaunchLog){
+            global.NLLaunchLog.line('Java: ' + ConfigManager.getEffectiveJavaExecutable(this.server.rawServer.id))
+            global.NLLaunchLog.line('起動引数: ' + loggableArgs.join(' '))
+        }
 
         const child = child_process.spawn(ConfigManager.getEffectiveJavaExecutable(this.server.rawServer.id), args, {
             cwd: this.gameDir,

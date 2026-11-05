@@ -19,16 +19,10 @@
         return String(s).replace(ANSI_RE, '')
     }
 
-    const listeners = []
-
     function push(line){
-        const clean = stripAnsi(line)
-        buffer.push(clean)
+        buffer.push(stripAnsi(line))
         if(buffer.length > MAX_LINES){
             buffer.splice(0, buffer.length - MAX_LINES)
-        }
-        for(let i = 0; i < listeners.length; i++){
-            try { listeners[i](clean) } catch(e) { /* a listener must never break logging */ }
         }
     }
 
@@ -96,14 +90,6 @@
 
     window.NLErrorLog = {
         pushLine: push,
-        // fn(line) is called for every captured line; returns a function that unsubscribes.
-        subscribe: function(fn){
-            listeners.push(fn)
-            return function(){
-                const i = listeners.indexOf(fn)
-                if(i >= 0) listeners.splice(i, 1)
-            }
-        },
         setLastError: setLastError,
         getLastError: function(){ return lastError },
         buildReport: buildReport,

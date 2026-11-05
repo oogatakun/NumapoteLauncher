@@ -81,6 +81,7 @@ function toggleLaunchArea(loading){
  * @param {string} details The new text for the loading details.
  */
 function setLaunchDetails(details){
+    NLLaunchLog.line(String(details).replace(/<[^>]*>/g, ''))
     launch_details_text.innerHTML = details
 }
 
@@ -349,6 +350,7 @@ let serverStatusListener = setInterval(() => refreshServerStatus(true), 300000)
  * @param {string} desc The overlay description.
  */
 function showLaunchFailure(title, desc, err = null){
+    NLLaunchLog.line('起動に失敗しました: ' + [title, desc, err && err.message].filter(Boolean).join(' / '))
     // Record error + best-effort context for the exportable report.
     try {
         const context = {}
@@ -539,20 +541,25 @@ async function dlAsync(login = true) {
 
     const loggerLaunchSuite = LoggerUtil.getLogger('LaunchSuite')
 
-    if(window.NLLaunchLog && ConfigManager.getShowLaunchLog()){
-        window.NLLaunchLog.start()
+    if(ConfigManager.getShowLaunchLog()){
+        NLLaunchLog.start()
+    } else {
+        NLLaunchLog.stop()
     }
 
     // Custom (user-created) instance path — bypasses the distribution.
     if(window.NLCustomLaunch && window.NLCustomLaunch.isCustomSelected()){
         if(login && ConfigManager.getSelectedAccount() == null){
             loggerLanding.error('You must be logged into an account.')
+            NLLaunchLog.line('アカウントにログインしていません。')
             return
         }
         const instance = ConfigManager.getCustomInstance(ConfigManager.getSelectedServer())
+        NLLaunchLog.line('起動構成: ' + instance.name + ' (Minecraft ' + instance.minecraftVersion + ' / ' + instance.loader + ')')
         toggleLaunchArea(true)
         try {
             proc = await window.NLCustomLaunch.launchCustomInstance(instance)
+            NLLaunchLog.attach(proc)
             setLaunchDetails(Lang.queryJS('landing.dlAsync.doneEnjoyServer'))
             const tempListener = function(data){
                 const t = data.trim()
@@ -585,10 +592,14 @@ async function dlAsync(login = true) {
     }
 
     const serv = distro.getServerById(ConfigManager.getSelectedServer())
+    if(serv != null && serv.rawServer != null){
+        NLLaunchLog.line('起動構成: ' + serv.rawServer.name)
+    }
 
     if(login) {
         if(ConfigManager.getSelectedAccount() == null){
             loggerLanding.error('You must be logged into an account.')
+            NLLaunchLog.line('アカウントにログインしていません。')
             return
         }
     }
@@ -794,6 +805,7 @@ async function dlAsync(login = true) {
         try {
             // Build Minecraft process.
             proc = pb.build()
+            NLLaunchLog.attach(proc)
 
             // Bind listeners to stdout.
             proc.stdout.on('data', tempListener)
