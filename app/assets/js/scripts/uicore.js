@@ -36,6 +36,44 @@ remote.getCurrentWebContents().on('devtools-opened', () => {
 webFrame.setZoomLevel(0)
 webFrame.setVisualZoomLevelLimits(1, 1)
 
+// Tell the user about an update found by the check that runs when the launcher starts. Each version
+// is offered once per session, and only on the main screen while no other dialog is open and no game
+// is being launched; until then it waits. Closing the dialog ("あとで") keeps the update: it is
+// installed when the launcher quits, and the update icon / settings tab still offer it.
+const _updatePrompted = new Set()
+function promptUpdate(info){
+    if(info == null || info.version == null || _updatePrompted.has(info.version)) return
+    _updatePrompted.add(info.version)
+    const version = String(info.version).replace(/[<>&"']/g, '')
+    const tryShow = () => {
+        const launching = typeof launch_details !== 'undefined' && launch_details.style.display === 'flex'
+        if(getCurrentView() !== VIEWS.landing || isOverlayVisible() || launching){
+            setTimeout(tryShow, 3000)
+            return
+        }
+        const manual = process.platform === 'darwin'
+        setOverlayContent(
+            Lang.queryJS('uicore.autoUpdate.promptTitle'),
+            Lang.queryJS(manual ? 'uicore.autoUpdate.promptDescManual' : 'uicore.autoUpdate.promptDesc').replace('{version}', version),
+            Lang.queryJS(manual ? 'uicore.autoUpdate.promptOpenDownload' : 'uicore.autoUpdate.promptInstallNow'),
+            Lang.queryJS('uicore.autoUpdate.promptLater')
+        )
+        setOverlayHandler(() => {
+            toggleOverlay(false)
+            if(manual){
+                if(info.darwindownload) shell.openExternal(info.darwindownload)
+            } else {
+                ipcRenderer.send('autoUpdateAction', 'installUpdateNow')
+            }
+        })
+        setDismissHandler(() => {
+            toggleOverlay(false)
+        })
+        toggleOverlay(true, true)
+    }
+    tryShow()
+}
+
 // Initialize auto updates in production environments.
 let updateCheckListener
 if(!isDev){
@@ -51,6 +89,7 @@ if(!isDev){
                 if(process.platform === 'darwin'){
                     info.darwindownload = `https://github.com/oogatakun/NumapoteLauncher/releases/download/v${info.version}/NumapoteLauncher-setup-${info.version}.dmg`
                     showUpdateUI(info)
+                    promptUpdate(info)
                 }
 
                 populateSettingsUpdateInformation(info)
@@ -63,6 +102,7 @@ if(!isDev){
                     }
                 })
                 showUpdateUI(info)
+                promptUpdate(info)
                 break
             case 'update-not-available':
                 loggerAutoUpdater.info('No new update found.')
