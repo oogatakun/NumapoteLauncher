@@ -176,9 +176,19 @@ ipcMain.on('autoUpdateAction', (event, arg, data) => {
             break
     }
 })
-// Redirect distribution index event from preloader to renderer.
+// Redirect distribution index event from preloader to renderer. The preloader can finish before the
+// page has registered its listener (a fast network or a cached index), and a message nobody listens
+// for is lost, which leaves the loading screen up forever. So the result is remembered, and the page
+// asks for it once its listener is in place.
+let distributionIndexResult = null
 ipcMain.on('distributionIndexDone', (event, res) => {
+    distributionIndexResult = res
     event.sender.send('distributionIndexDone', res)
+})
+ipcMain.on('distributionIndexRequest', (event) => {
+    if(distributionIndexResult != null){
+        event.sender.send('distributionIndexDone', distributionIndexResult)
+    }
 })
 
 // 手動ダウンロード画面
