@@ -1316,11 +1316,23 @@ document.addEventListener('DOMContentLoaded', () => {
 })
 
 // --- Share / receive launch configs ---
+// A code with embedded jars can be tens of MB. A textarea cannot lay text like that out (seconds to show
+// it, tens of seconds to paste it, and it stays slow to scroll), so a code over this size is kept in
+// memory and the box only shows a note. Copy / save / import work on the code held in memory.
+const SHARE_BIG_CODE = 200000
+let _shareCodeFull = ''
+let _shareImportBig = null
+
+function _shareSizeText(n){ return (n / 1048576).toFixed(1) + ' MB' }
+
 function _showShareCode(cid, includeRaw){
     try {
         const built = window.NLShare.buildShareCode(cid, includeRaw)
         const ta = document.getElementById('shareCodeText')
-        ta.value = built.code
+        _shareCodeFull = built.code
+        ta.value = built.code.length > SHARE_BIG_CODE
+            ? '（コードが大きいため、ここには表示しません: ' + _shareSizeText(built.code.length) + '）\n「コードをコピー」か「ファイルに保存」で渡してください。'
+            : built.code
         ta.dataset.url = built.url
         ta.dataset.link = built.link
         ta.dataset.cid = cid
@@ -1330,13 +1342,15 @@ function _showShareCode(cid, includeRaw){
             const b = document.getElementById(bid)
             if(b){ b.disabled = tooLong; b.style.opacity = tooLong ? '0.5' : '' }
         }
+        const saveFile = document.getElementById('shareCodeSaveFile')
+        if(saveFile) saveFile.style.display = tooLong ? '' : 'none'
         const note = document.getElementById('shareCodeLongNote')
         const rebuild = document.getElementById('shareCodeNoJars')
         if(note){
             note.style.display = tooLong ? '' : 'none'
             note.textContent = !tooLong ? '' : (includeRaw
-                ? 'MODのファイルそのものを含めているため、コードが非常に長く（' + built.code.length + '文字）、リンクとアプリ用URLは使えません。「コードをコピー」で渡してください。リンクで渡したい場合は、MODファイルを含めずに作り直せます（出所不明のMODは相手側には入りません）。'
-                : 'コードが長い（' + built.code.length + '文字）ため、リンクとアプリ用URLは使えません。「コードをコピー」で渡してください。')
+                ? 'MODのファイルそのものを含めているため、コードが非常に長く（' + built.code.length + '文字）、リンクとアプリ用URLは使えません。「コードをコピー」か「ファイルに保存」で渡してください。リンクで渡したい場合は、MODファイルを含めずに作り直せます（出所不明のMODは相手側には入りません）。'
+                : 'コードが長い（' + built.code.length + '文字）ため、リンクとアプリ用URLは使えません。「コードをコピー」か「ファイルに保存」で渡してください。')
         }
         if(rebuild) rebuild.style.display = (tooLong && includeRaw) ? '' : 'none'
         toggleOverlay(true, true, 'shareCodeContent')
@@ -1368,8 +1382,7 @@ function _shareShow(step){
 // code (optional): opened from a link; it is only filled in and decoded, never imported without a click.
 function openShareImport(code){
     _pendingShare = null
-    const ta = document.getElementById('shareImportText')
-    if(ta) ta.value = code || ''
+    _setShareImportCode(code || '')
     const st = document.getElementById('shareImportStatus')
     if(st) st.textContent = ''
     const btn = document.getElementById('shareImportBtn')
@@ -1379,9 +1392,54 @@ function openShareImport(code){
     if(code) runShareImport()
 }
 
+// The code to import: a large one is held in memory, anything else is what is in the box.
+function _shareImportCode(){
+    return _shareImportBig != null ? _shareImportBig : document.getElementById('shareImportText').value
+}
+
+function _setShareImportCode(code){
+    const ta = document.getElementById('shareImportText')
+    if(code.length > SHARE_BIG_CODE){
+        _shareImportBig = code
+        if(ta) ta.value = '（大きなコードを読み込みました: ' + _shareSizeText(code.length) + '）\n「読み込み」を押してください。'
+    } else {
+        _shareImportBig = null
+        if(ta) ta.value = code
+    }
+}
+
+async function _chooseShareFile(){
+    try {
+        const r = await remote.dialog.showOpenDialog(remote.getCurrentWindow(), {
+            title: '共有コードのファイルを選ぶ',
+            properties: ['openFile'],
+            filters: [{ name: 'テキスト', extensions: ['txt'] }, { name: 'すべてのファイル', extensions: ['*'] }]
+        })
+        if(r.canceled || !r.filePaths || !r.filePaths[0]) return
+        _setShareImportCode(require('fs').readFileSync(r.filePaths[0], 'utf-8').trim())
+        runShareImport()
+    } catch(err){
+        setOverlayContent('読み込み失敗', _mrEsc(err.message || 'ファイルを読めませんでした'), 'OK'); setOverlayHandler(null); toggleOverlay(true)
+    }
+}
+
+async function _saveShareCodeFile(){
+    try {
+        const r = await remote.dialog.showSaveDialog(remote.getCurrentWindow(), {
+            title: '共有コードを保存',
+            defaultPath: 'numapote-share.txt',
+            filters: [{ name: 'テキスト', extensions: ['txt'] }]
+        })
+        if(r.canceled || !r.filePath) return
+        require('fs').writeFileSync(r.filePath, _shareCodeFull, 'utf-8')
+    } catch(err){
+        setOverlayContent('保存失敗', _mrEsc(err.message || 'ファイルを保存できませんでした'), 'OK'); setOverlayHandler(null); toggleOverlay(true)
+    }
+}
+
 function runShareImport(){
     let payload
-    try { payload = window.NLShare.decodeShareCode(document.getElementById('shareImportText').value) }
+    try { payload = window.NLShare.decodeShareCode(_shareImportCode()) }
     catch(err){ setOverlayContent('コードエラー', _mrEsc(err.message || 'コードが不正です'), 'OK'); setOverlayHandler(null); toggleOverlay(true); return }
     showShareChoice(payload)
 }
@@ -1492,7 +1550,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if(rb) rb.addEventListener('click', () => openShareImport())
     const copy = (text) => { try { require('electron').clipboard.writeText(text || '') } catch(e){ /* ignore */ } }
     const cp = document.getElementById('shareCodeCopy')
-    if(cp) cp.addEventListener('click', () => copy(document.getElementById('shareCodeText').value))
+    if(cp) cp.addEventListener('click', () => copy(_shareCodeFull))
+    const sf = document.getElementById('shareCodeSaveFile')
+    if(sf) sf.addEventListener('click', () => _saveShareCodeFile())
     const nj = document.getElementById('shareCodeNoJars')
     if(nj) nj.addEventListener('click', () => _showShareCode(document.getElementById('shareCodeText').dataset.cid, false))
     const cpl = document.getElementById('shareCodeCopyLink')
@@ -1503,6 +1563,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if(scc) scc.addEventListener('click', () => _backToServerCustom())
     const sib = document.getElementById('shareImportBtn')
     if(sib) sib.addEventListener('click', () => runShareImport())
+    const sif = document.getElementById('shareImportFile')
+    if(sif) sif.addEventListener('click', () => _chooseShareFile())
+    const sit = document.getElementById('shareImportText')
+    if(sit){
+        // A large paste never goes into the box (that is what freezes it); the code is held in memory instead.
+        sit.addEventListener('paste', (e) => {
+            const text = e.clipboardData ? e.clipboardData.getData('text') : ''
+            if(text.length > SHARE_BIG_CODE){
+                e.preventDefault()
+                _setShareImportCode(text)
+            } else if(_shareImportBig != null){
+                _shareImportBig = null
+                sit.value = ''
+            }
+        })
+        // Typing replaces a held code.
+        sit.addEventListener('input', () => { _shareImportBig = null })
+    }
     const sic = document.getElementById('shareImportCancel')
     if(sic) sic.addEventListener('click', () => _backToServerCustom())
     Array.from(document.getElementsByName('shareTarget')).forEach(r => r.addEventListener('change', updateShareChoiceNote))
