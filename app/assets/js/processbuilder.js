@@ -405,6 +405,28 @@ class ProcessBuilder {
     }
 
     /**
+     * The Java agent that asks "really quit?" when the Minecraft window is closed (close button / Alt+F4),
+     * as JVM arguments. It hooks LWJGL 3 / GLFW, so it is only for 1.13+ (this is only called from there),
+     * and it is only built and checked on Windows. Returns nothing when it is off or the jar is missing.
+     *
+     * @returns {Array.<string>} The JVM arguments, possibly empty.
+     */
+    _closeConfirmArgs(){
+        if(process.platform !== 'win32' || !ConfigManager.getConfirmGameClose()){
+            return []
+        }
+        const rel = path.join('libraries', 'java', 'numapote-closeconfirm.jar')
+        // electron . (development) runs from the project folder; the installed app has it in resources.
+        const jar = [path.join(process.cwd(), rel), path.join(process.resourcesPath || '', rel)].find(p => fs.existsSync(p))
+        // The value after the jar path is split off at the first '=', so a path containing one cannot be used.
+        if(jar == null || jar.includes('=')){
+            logger.warn('Close confirmation agent not available, skipping it.', jar)
+            return []
+        }
+        return ['-javaagent:' + jar + '=ja']
+    }
+
+    /**
      * Construct the argument array that will be passed to the JVM process.
      * This function is for 1.13+
      *
@@ -444,6 +466,7 @@ class ProcessBuilder {
         args.push('-Xmx' + ConfigManager.getMaxRAM(this.server.rawServer.id))
         args.push('-Xms' + ConfigManager.getMinRAM(this.server.rawServer.id))
         args = args.concat(ConfigManager.getJVMOptions(this.server.rawServer.id))
+        args = args.concat(this._closeConfirmArgs())
 
         // Main Java Class
         args.push(this.hasModLoader ? this.modManifest.mainClass : this.vanillaManifest.mainClass)
