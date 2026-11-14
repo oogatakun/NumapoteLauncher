@@ -1388,7 +1388,8 @@ const _gameSettingBindings = {
     Fullscreen: { get: () => ConfigManager.getFullscreen(), set: (v) => ConfigManager.setFullscreen(v) },
     AutoConnect: { get: () => ConfigManager.getAutoConnect(), set: (v) => ConfigManager.setAutoConnect(v) },
     LaunchDetached: { get: () => ConfigManager.getLaunchDetached(), set: (v) => ConfigManager.setLaunchDetached(v) },
-    ShowLaunchLog: { get: () => ConfigManager.getShowLaunchLog(), set: (v) => ConfigManager.setShowLaunchLog(v) }
+    ShowLaunchLog: { get: () => ConfigManager.getShowLaunchLog(), set: (v) => ConfigManager.setShowLaunchLog(v) },
+    ConfirmGameClose: { get: () => ConfigManager.getConfirmGameClose(), set: (v) => ConfigManager.setConfirmGameClose(v) }
 }
 
 function _gameSettingInputs(){

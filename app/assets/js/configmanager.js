@@ -173,7 +173,8 @@ const DEFAULT_CONFIG = {
             fullscreen: false,
             autoConnect: true,
             launchDetached: true,
-            showLaunchLog: false
+            showLaunchLog: false,
+            confirmGameClose: true
         },
         launcher: {
             allowPrerelease: false,
@@ -1197,6 +1198,26 @@ exports.getShowLaunchLog = function(def = false){
  */
 exports.setShowLaunchLog = function(showLaunchLog){
     config.settings.game.showLaunchLog = showLaunchLog === true
+}
+
+/**
+ * Check if closing the Minecraft window (close button / Alt+F4) asks for confirmation first.
+ * On unless it was turned off, also for configs written before this setting existed.
+ *
+ * @param {boolean} def Optional. If true, the default value will be returned.
+ * @returns {boolean} Whether or not closing the game window is confirmed.
+ */
+exports.getConfirmGameClose = function(def = false){
+    return !def ? config.settings.game.confirmGameClose !== false : DEFAULT_CONFIG.settings.game.confirmGameClose
+}
+
+/**
+ * Change the status of whether or not closing the Minecraft window is confirmed.
+ *
+ * @param {boolean} confirmGameClose Whether or not closing the game window is confirmed.
+ */
+exports.setConfirmGameClose = function(confirmGameClose){
+    config.settings.game.confirmGameClose = confirmGameClose === true
 }
 
 // Launcher Settings
